@@ -1,0 +1,38 @@
+# Przykładowa jednostka systemd uruchamiająca aplikację przez gunicorna.
+#
+# Instalacja:
+#   1. Skopiuj do /etc/systemd/system/recipe-app.service
+#   2. Popraw ścieżki (WorkingDirectory, ExecStart) i User/Group pod swój serwer
+#   3. Upewnij się, że /opt/recipe-app/.env istnieje i ma SECRET_KEY (patrz .env.example)
+#   4. sudo systemctl daemon-reload
+#   5. sudo systemctl enable --now recipe-app
+#   6. sudo systemctl status recipe-app   /   journalctl -u recipe-app -f
+
+[Unit]
+Description=Wielka Ksiega Przepisow (Flask + gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/recipe-app
+EnvironmentFile=/opt/recipe-app/.env
+ExecStart=/opt/recipe-app/venv/bin/gunicorn \
+    --workers 4 \
+    --bind 127.0.0.1:8000 \
+    --access-logfile - \
+    --error-logfile - \
+    wsgi:app
+Restart=on-failure
+RestartSec=5
+
+# Twardnienie (ogranicza, co proces może zrobić w systemie, niezależnie od kodu appki)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/recipe-app/static/uploads /opt/recipe-app/recipes.db /opt/recipe-app/instance
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

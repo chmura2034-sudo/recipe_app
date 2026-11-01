@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Panel administratora – Wielka Księga Przepisów{% endblock %}
+
+{% block content %}
+  <div class="admin-header">
+    <h1>Panel administratora</h1>
+    <div class="admin-header-actions">
+      <a class="btn btn-secondary" href="{{ url_for('editors_page') }}">👤 Redaktorzy</a>
+      <a class="btn btn-secondary" href="{{ url_for('backup_page') }}">🗄 Kopia zapasowa</a>
+      <a class="btn {{ 'btn-highlight' if pending_count else 'btn-secondary' }}" href="{{ url_for('review_queue') }}">
+        📝 Kolejka zatwierdzania{% if pending_count %} ({{ pending_count }}){% endif %}
+      </a>
+      <a class="btn" href="{{ url_for('recipe_create') }}">+ Dodaj przepis</a>
+    </div>
+  </div>
+
+  {% if recipes %}
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Tytuł</th>
+          <th>Autor</th>
+          <th>Status</th>
+          <th>Dodano</th>
+          <th>Akcje</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for recipe in recipes %}
+          <tr>
+            <td><a href="{{ url_for('recipe_detail', slug=recipe.slug) }}">{{ recipe.title }}</a></td>
+            <td>{{ recipe.author.username if recipe.author else "—" }}</td>
+            <td><span class="status-badge status-{{ recipe.status }}">{{ recipe.status_display }}</span></td>
+            <td>{{ recipe.created_at.strftime('%Y-%m-%d') }}</td>
+            <td class="admin-table-actions">
+              <a class="btn btn-small" href="{{ url_for('recipe_edit', recipe_id=recipe.id) }}">Edytuj</a>
+              <form method="post" action="{{ url_for('recipe_delete', recipe_id=recipe.id) }}"
+                    data-confirm="Na pewno usunąć ten przepis?">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-small btn-danger" type="submit">Usuń</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty-state">Nie dodano jeszcze żadnych przepisów.</p>
+  {% endif %}
+{% endblock %}

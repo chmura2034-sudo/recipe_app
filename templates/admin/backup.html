@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Kopia zapasowa – Wielka Księga Przepisów{% endblock %}
+
+{% block content %}
+  <a class="back-link" href="{{ url_for('admin_dashboard') }}">&larr; Wróć do panelu administratora</a>
+
+  <h1>Kopia zapasowa przepisów</h1>
+  <p class="muted-info">
+    W bazie jest obecnie <strong>{{ recipe_count }}</strong> przepis(ów) i <strong>{{ tag_count }}</strong> tag(ów).
+  </p>
+
+  <section class="backup-section">
+    <h2>📦 Eksport</h2>
+    <p>
+      Pobierz archiwum ZIP zawierające wszystkie przepisy (tytuły, składniki, kroki, tagi,
+      informacje o formie i porcjach) w formacie JSON oraz kopie wszystkich zdjęć potraw.
+      Trzymaj ten plik w bezpiecznym miejscu — np. na dysku w chmurze albo na swoim komputerze —
+      poza serwerem, na którym działa aplikacja. Dzięki temu odtworzysz bazę po awarii albo
+      przeniesiesz ją na nowy serwer.
+    </p>
+    <a class="btn" href="{{ url_for('backup_export') }}">⬇ Pobierz kopię zapasową (.zip)</a>
+  </section>
+
+  <section class="backup-section">
+    <h2>📥 Import / przywracanie</h2>
+    <p>Wgraj wcześniej pobrane archiwum ZIP wygenerowane przez tę aplikację i wybierz tryb importu:</p>
+
+    <form method="post" action="{{ url_for('backup_import') }}" enctype="multipart/form-data"
+          class="styled-form" id="restoreForm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <label for="backup_file">Plik kopii zapasowej (.zip)</label>
+      <input type="file" id="backup_file" name="backup_file" accept=".zip" required>
+
+      <div class="restore-mode-options">
+        <label class="restore-mode-option">
+          <input type="radio" name="mode" value="merge" checked>
+          <span><strong>Uzupełnij i zaktualizuj</strong> — dopasowuje przepisy po tytule/slugu;
+            istniejące zostają nadpisane danymi z kopii, inne przepisy w bazie zostają bez zmian.</span>
+        </label>
+        <label class="restore-mode-option">
+          <input type="radio" name="mode" value="skip_existing">
+          <span><strong>Dodaj tylko nowe</strong> — przepisy, które już istnieją w bazie
+            (ten sam tytuł/slug), zostają całkowicie pominięte i niezmienione.</span>
+        </label>
+        <label class="restore-mode-option restore-mode-danger">
+          <input type="radio" name="mode" value="wipe">
+          <span><strong>Zastąp wszystko</strong> — usuwa WSZYSTKIE obecne przepisy i tagi,
+            a następnie importuje zawartość pliku od nowa. Nieodwracalne.</span>
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn-secondary">Importuj</button>
+    </form>
+  </section>
+
+  <section class="backup-section backup-tips">
+    <h2>💡 Wskazówki</h2>
+    <ul>
+      <li>Rób kopię zapasową regularnie — po większych zmianach w przepisach, a najlepiej też
+        cyklicznie (np. raz w tygodniu).</li>
+      <li>Plik ZIP jest czytelny i przenośny — możesz go otworzyć i zajrzeć do <code>recipes.json</code>,
+        żeby zobaczyć dokładnie, co zawiera.</li>
+      <li>Import w trybie „Zastąp wszystko” jest przydatny przy przenoszeniu na nowy serwer;
+        „Uzupełnij i zaktualizuj” — do bieżącej synchronizacji; „Dodaj tylko nowe” — gdy łączysz
+        dwie niezależnie edytowane bazy i nie chcesz nadpisać lokalnych zmian.</li>
+      <li>Chcesz zautomatyzować eksport? Ten sam efekt co kliknięcie „Pobierz kopię zapasową”
+        daje zalogowane żądanie GET na adres <code>/admin/kopia-zapasowa/eksport</code> —
+        można to wywołać np. z zaplanowanego zadania (cron) i zapisać wynik na zewnętrznym dysku.</li>
+    </ul>
+  </section>
+
+  <script nonce="{{ csp_nonce }}">
+    document.getElementById("restoreForm").addEventListener("submit", (e) => {
+      const mode = document.querySelector('input[name="mode"]:checked').value;
+      if (mode === "wipe") {
+        const confirmed = confirm(
+          "Ta operacja USUNIE wszystkie obecne przepisy i tagi, a następnie zaimportuje zawartość pliku.\n\nTa operacja jest nieodwracalna. Kontynuować?"
+        );
+        if (!confirmed) e.preventDefault();
+      }
+    });
+  </script>
+{% endblock %}

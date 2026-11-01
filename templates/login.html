@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Logowanie – Wielka Księga Przepisów{% endblock %}
+
+{% block content %}
+  <div class="form-page">
+    <h1>Logowanie administratora</h1>
+    <form method="post" class="styled-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <label for="username">Nazwa użytkownika</label>
+      <input type="text" id="username" name="username" required autofocus>
+
+      <label for="password">Hasło</label>
+      <input type="password" id="password" name="password" required>
+
+      <button type="submit" class="btn">Zaloguj się</button>
+    </form>
+  </div>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Kolejka zatwierdzania – Wielka Księga Przepisów{% endblock %}
+
+{% block content %}
+  <a class="back-link" href="{{ url_for('admin_dashboard') }}">&larr; Wróć do panelu administratora</a>
+
+  <h1>Kolejka zatwierdzania</h1>
+
+  <section class="queue-section">
+    <h2>Oczekujące na zatwierdzenie ({{ pending|length }})</h2>
+
+    {% if pending %}
+      {% for recipe in pending %}
+        <div class="queue-item">
+          <div class="queue-item-info">
+            <a href="{{ url_for('recipe_detail', slug=recipe.slug) }}" class="queue-item-title">{{ recipe.title }}</a>
+            <span class="queue-item-meta">
+              zgłosił(a): {{ recipe.author.username if recipe.author else "nieznany" }}
+              · {{ recipe.created_at.strftime('%Y-%m-%d %H:%M') }}
+            </span>
+            {% if recipe.description %}<p class="queue-item-description">{{ recipe.description }}</p>{% endif %}
+          </div>
+          <div class="queue-item-actions">
+            <form method="post" action="{{ url_for('recipe_approve', recipe_id=recipe.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-small">✓ Zatwierdź</button>
+            </form>
+            <button type="button" class="btn btn-small btn-danger" data-toggle-target="reject-form-{{ recipe.id }}">✕ Odrzuć</button>
+            <a class="btn btn-small btn-secondary" href="{{ url_for('recipe_edit', recipe_id=recipe.id) }}">Edytuj</a>
+          </div>
+          <form method="post" action="{{ url_for('recipe_reject', recipe_id=recipe.id) }}"
+                class="reject-form" id="reject-form-{{ recipe.id }}" style="display:none;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label for="reason-{{ recipe.id }}">Powód odrzucenia (widoczny dla redaktora)</label>
+            <textarea id="reason-{{ recipe.id }}" name="reason" rows="2"
+                      placeholder="np. brak dokładnych ilości składników"></textarea>
+            <button type="submit" class="btn btn-small btn-danger">Potwierdź odrzucenie</button>
+          </form>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="empty-state">Brak przepisów oczekujących na zatwierdzenie. 🎉</p>
+    {% endif %}
+  </section>
+
+  <section class="queue-section">
+    <h2>Odrzucone ({{ rejected|length }})</h2>
+    {% if rejected %}
+      {% for recipe in rejected %}
+        <div class="queue-item">
+          <div class="queue-item-info">
+            <a href="{{ url_for('recipe_detail', slug=recipe.slug) }}" class="queue-item-title">{{ recipe.title }}</a>
+            <span class="queue-item-meta">
+              zgłosił(a): {{ recipe.author.username if recipe.author else "nieznany" }}
+              · {{ recipe.created_at.strftime('%Y-%m-%d %H:%M') }}
+            </span>
+            {% if recipe.rejection_reason %}
+              <p class="queue-item-description"><strong>Powód odrzucenia:</strong> {{ recipe.rejection_reason }}</p>
+            {% endif %}
+          </div>
+          <div class="queue-item-actions">
+            <form method="post" action="{{ url_for('recipe_approve', recipe_id=recipe.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-small">✓ Zatwierdź mimo to</button>
+            </form>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="empty-state">Brak odrzuconych przepisów.</p>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edytuj przepis" if recipe else "Nowy przepis" }} – Wielka Księga Przepisów{% endblock %}
+
+{% block content %}
+  {% macro move_buttons() %}
+    <button type="button" class="btn-move-row" data-dir="-1" title="Przesuń w górę">&#9650;</button>
+    <button type="button" class="btn-move-row" data-dir="1" title="Przesuń w dół">&#9660;</button>
+  {% endmacro %}
+
+  {% macro item_row(item=None) %}
+    <div class="ingredient-row">
+      <input type="number" step="any" min="0" name="ingredient_amount[]" class="ing-amount" placeholder="Ilość" value="{{ item.amount if item else '' }}">
+      <select name="ingredient_unit[]" class="ing-unit">
+        <option value="">jednostka</option>
+        {% for u in units %}
+          <option value="{{ u }}" {{ "selected" if item and item.unit == u else "" }}>{{ u }}</option>
+        {% endfor %}
+        {% if item and item.unit and item.unit not in units %}
+          <option value="{{ item.unit }}" selected>{{ item.unit }}</option>
+        {% endif %}
+      </select>
+      <input type="text" name="ingredient_name[]" class="ing-name" placeholder="Nazwa składnika, np. mąka pszenna" value="{{ item.name if item else '' }}" required>
+      <span class="ing-nutrition-group" title="Wartości odżywcze dla podanej ilości (opcjonalnie)">
+        <input type="number" step="any" min="0" name="ingredient_kcal[]" class="ing-nutrition" placeholder="kcal" value="{{ item.kcal if item else '' }}" title="Kalorie dla podanej ilości">
+        <input type="number" step="any" min="0" name="ingredient_protein[]" class="ing-nutrition" placeholder="B (g)" value="{{ item.protein if item else '' }}" title="Białko (g) dla podanej ilości">
+        <input type="number" step="any" min="0" name="ingredient_fat[]" class="ing-nutrition" placeholder="T (g)" value="{{ item.fat if item else '' }}" title="Tłuszcz (g) dla podanej ilości">
+        <input type="number" step="any" min="0" name="ingredient_carbs[]" class="ing-nutrition" placeholder="W (g)" value="{{ item.carbs if item else '' }}" title="Węglowodany (g) dla podanej ilości">
+      </span>
+      {{ move_buttons() }}
+      <button type="button" class="btn-remove-row" title="Usuń składnik">&times;</button>
+    </div>
+  {% endmacro %}
+
+  {% macro section_row(name="") %}
+    <div class="ingredient-section-row">
+      <span class="section-label">Sekcja</span>
+      <input type="text" class="section-name-input" maxlength="80" placeholder="Nazwa sekcji, np. Ciasto lub Krem" value="{{ name }}" required>
+      {{ move_buttons() }}
+      <button type="button" class="btn-remove-row" title="Usuń sekcję (składniki zostają)">&times;</button>
+    </div>
+  {% endmacro %}
+
+  <a class="back-link" href="{{ cancel_url }}">&larr; Wróć</a>
+
+  <div class="form-page form-page-wide">
+    <h1>{{ "Edytuj przepis" if recipe else "Dodaj nowy przepis" }}</h1>
+
+    {% if editor_mode %}
+      <p class="editor-mode-notice">
+        ✏️ Jesteś zalogowany jako redaktor. Ten przepis
+        {{ "zostanie ponownie wysłany" if recipe else "zostanie wysłany" }}
+        do zatwierdzenia przez administratora i pojawi się publicznie dopiero po akceptacji.
+      </p>
+    {% endif %}
+
+    {% if recipe and recipe.status == "rejected" and recipe.rejection_reason %}
+      <div class="rejection-notice">
+        <strong>Ten przepis został odrzucony przez administratora.</strong>
+        <p>Powód: {{ recipe.rejection_reason }}</p>
+        <p>Popraw przepis i zapisz — trafi ponownie do kolejki zatwierdzania.</p>
+      </div>
+    {% endif %}
+
+    <form method="post" class="styled-form" enctype="multipart/form-data" id="recipeForm">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <label for="title">Tytuł *</label>
+      <input type="text" id="title" name="title" required value="{{ recipe.title if recipe else '' }}">
+
+      <label for="description">Krótki opis</label>
+      <input type="text" id="description" name="description" value="{{ recipe.description if recipe else '' }}">
+
+      <!-- ---------- ZDJĘCIE ---------- -->
+      <label>Zdjęcie potrawy</label>
+      <div class="image-dropzone" id="imageDropzone" tabindex="0">
+        <img id="imagePreview" class="image-preview" alt="Podgląd zdjęcia"
+             src="{{ recipe.image_url if recipe and recipe.image_url else '' }}"
+             style="{{ '' if recipe and recipe.image_url else 'display:none;' }}">
+        <div id="imageDropzoneHint" class="image-dropzone-hint" style="{{ 'display:none;' if recipe and recipe.image_url else '' }}">
+          📷 Kliknij, aby wybrać plik, albo wklej zdjęcie ze schowka (Ctrl+V)
+        </div>
+        <button type="button" id="imageRemoveBtn" class="btn btn-small btn-danger image-remove-btn"
+                style="{{ '' if recipe and recipe.image_url else 'display:none;' }}">Usuń zdjęcie</button>
+      </div>
+      <input type="file" id="imageInput" name="image" accept="image/*" hidden>
+      <input type="hidden" id="removeImageFlag" name="remove_image" value="0">
+
+      <!-- ---------- SKŁADNIKI ---------- -->
+      <label>Składniki *</label>
+      <p class="field-hint">Możesz podzielić składniki na sekcje (np. „Ciasto”, „Krem”) — sekcja obejmuje wszystkie składniki pod nią, aż do następnej sekcji. Kolejność zmienisz przyciskami ▲▼. Pod każdym składnikiem możesz opcjonalnie podać kalorie/białko/tłuszcz/węglowodany <strong>dla podanej ilości</strong> (nie na 100 g) — strona przepisu zsumuje je i policzy wartości na porcję.</p>
+      <div id="ingredientsWrapper" class="dynamic-rows">
+        {% set ing_sections = recipe.ingredients_sections if recipe else [] %}
+        {% if ing_sections %}
+          {% for section in ing_sections %}
+            {% if section.name %}{{ section_row(section.name) }}{% endif %}
+            {% for item in section["items"] %}{{ item_row(item) }}{% endfor %}
+          {% endfor %}
+        {% else %}
+          {{ item_row() }}
+        {% endif %}
+      </div>
+      <input type="hidden" id="ingredientsStructured" name="ingredients_structured" value="">
+      <div class="dynamic-rows-actions">
+        <button type="button" id="addIngredientBtn" class="btn btn-small btn-secondary">+ Dodaj składnik</button>
+        <button type="button" id="addSectionBtn" class="btn btn-small btn-secondary">+ Dodaj sekcję</button>
+      </div>
+
+      <!-- ---------- KROKI ---------- -->
+      <label>Sposób przygotowania *</label>
+      <div id="stepsWrapper" class="dynamic-rows">
+        {% if recipe and recipe.instructions_list %}
+          {% for step in recipe.instructions_list %}
+            <div class="step-row">
+              <span class="step-number">{{ loop.index }}.</span>
+              <input type="text" name="step[]" placeholder="Opisz krok…" value="{{ step }}" required>
+              <button type="button" class="btn-remove-row" title="Usuń krok">&times;</button>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="step-row">
+            <span class="step-number">1.</span>
+            <input type="text" name="step[]" placeholder="Opisz krok…" required>
+            <button type="button" class="btn-remove-row" title="Usuń krok">&times;</button>
+          </div>
+        {% endif %}
+      </div>
+      <button type="button" id="addStepBtn" class="btn btn-small btn-secondary">+ Dodaj krok</button>
+
+      <!-- ---------- FORMA + PORCJE ---------- -->
+      <div class="form-row">
+        <div>
+          <label for="pan_shape">Kształt formy</label>
+          <select id="pan_shape" name="pan_shape">
+            <option value="">— nie dotyczy —</option>
+            {% for key, label in pan_shapes.items() %}
+              <option value="{{ key }}" {{ "selected" if recipe and recipe.pan_shape == key else "" }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div id="panSizeRound">
+          <label for="pan_size_cm">Średnica formy (cm)</label>
+          <input type="number" id="pan_size_cm" name="pan_size_cm" min="0"
+                 value="{{ recipe.pan_size_cm if recipe and recipe.pan_size_cm else '' }}">
+        </div>
+        <div id="panSizeRectWidth">
+          <label for="pan_width_cm">Bok A formy (cm)</label>
+          <input type="number" id="pan_width_cm" name="pan_width_cm" min="0"
+                 value="{{ recipe.pan_width_cm if recipe and recipe.pan_width_cm else '' }}">
+        </div>
+        <div id="panSizeRectLength">
+          <label for="pan_length_cm">Bok B formy (cm)</label>
+          <input type="number" id="pan_length_cm" name="pan_length_cm" min="0"
+                 value="{{ recipe.pan_length_cm if recipe and recipe.pan_length_cm else '' }}">
+        </div>
+        <div>
+          <label for="servings">Liczba porcji</label>
+          <input type="number" id="servings" name="servings" min="0"
+                 value="{{ recipe.servings if recipe else '' }}">
+        </div>
+      </div>
+
+      <!-- ---------- TAGI ---------- -->
+      <label for="tags">Tagi (oddziel przecinkami)</label>
+      <input type="text" id="tags" name="tags" placeholder="np. obiad, wegańskie, deser"
+             value="{{ recipe.tags | map(attribute='name') | join(', ') if recipe else '' }}"
+             list="tagSuggestions">
+      <datalist id="tagSuggestions">
+        {% for tag in all_tags %}<option value="{{ tag.name }}">{% endfor %}
+      </datalist>
+
+      <button type="submit" class="btn">{{ "Zapisz zmiany" if recipe else "Dodaj przepis" }}</button>
+    </form>
+  </div>
+
+  <template id="ingredientRowTemplate">{{ item_row() }}</template>
+
+  <template id="sectionRowTemplate">{{ section_row() }}</template>
+
+  <template id="stepRowTemplate">
+    <div class="step-row">
+      <span class="step-number"></span>
+      <input type="text" name="step[]" placeholder="Opisz krok…" required>
+      <button type="button" class="btn-remove-row" title="Usuń krok">&times;</button>
+    </div>
+  </template>
+
+  <script nonce="{{ csp_nonce }}">
+    // ---------- ZDJĘCIE: wybór pliku oraz wklejanie ze schowka (Ctrl+V) ----------
+    const dropzone = document.getElementById("imageDropzone");
+    const imageInput = document.getElementById("imageInput");
+    const imagePreview = document.getElementById("imagePreview");
+    const imageHint = document.getElementById("imageDropzoneHint");
+    const imageRemoveBtn = document.getElementById("imageRemoveBtn");
+    const removeImageFlag = document.getElementById("removeImageFlag");
+
+    function showImageFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        imagePreview.src = e.target.result;
+        imagePreview.style.display = "block";
+        imageHint.style.display = "none";
+        imageRemoveBtn.style.display = "inline-block";
+      };
+      reader.readAsDataURL(file);
+      removeImageFlag.value = "0";
+    }
+
+    dropzone.addEventListener("click", (e) => {
+      if (e.target !== imageRemoveBtn) imageInput.click();
+    });
+
+    imageInput.addEventListener("change", () => {
+      if (imageInput.files && imageInput.files[0]) {
+        showImageFile(imageInput.files[0]);
+      }
+    });
+
+    // Wklejanie obrazka ze schowka po skupieniu się na strefie (kliknij, a potem Ctrl+V)
+    dropzone.addEventListener("paste", (e) => {
+      const items = (e.clipboardData || window.clipboardData).items;
+      for (const item of items) {
+        if (item.type.indexOf("image") === 0) {
+          const file = item.getAsFile();
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          imageInput.files = dt.files;
+          showImageFile(file);
+          e.preventDefault();
+          break;
+        }
+      }
+    });
+
+    // Wklejanie działa też, gdy schowek trafi gdziekolwiek na stronę
+    document.addEventListener("paste", (e) => {
+      if (document.activeElement === dropzone) return; // już obsłużone wyżej
+      const items = (e.clipboardData || window.clipboardData).items;
+      for (const item of items) {
+        if (item.type.indexOf("image") === 0) {
+          const file = item.getAsFile();
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          imageInput.files = dt.files;
+          showImageFile(file);
+          e.preventDefault();
+          break;
+        }
+      }
+    });
+
+    imageRemoveBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      imageInput.value = "";
+      imagePreview.src = "";
+      imagePreview.style.display = "none";
+      imageHint.style.display = "block";
+      imageRemoveBtn.style.display = "none";
+      removeImageFlag.value = "1";
+    });
+
+    // ---------- SKŁADNIKI: dodawanie / usuwanie wierszy ----------
+    const ingredientsWrapper = document.getElementById("ingredientsWrapper");
+    const ingredientTemplate = document.getElementById("ingredientRowTemplate");
+
+    const sectionTemplate = document.getElementById("sectionRowTemplate");
+
+    document.getElementById("addIngredientBtn").addEventListener("click", () => {
+      const clone = ingredientTemplate.content.cloneNode(true);
+      ingredientsWrapper.appendChild(clone);
+    });
+
+    document.getElementById("addSectionBtn").addEventListener("click", () => {
+      ingredientsWrapper.appendChild(sectionTemplate.content.cloneNode(true));
+      ingredientsWrapper.lastElementChild.querySelector(".section-name-input").focus();
+    });
+
+    // Przed wysłaniem zapisujemy składniki i sekcje w kolejności, w jakiej widać je na ekranie.
+    document.getElementById("recipeForm").addEventListener("submit", () => {
+      const entries = [];
+      ingredientsWrapper.querySelectorAll(".ingredient-row, .ingredient-section-row").forEach((row) => {
+        if (row.classList.contains("ingredient-section-row")) {
+          const name = row.querySelector(".section-name-input").value.trim();
+          if (name) entries.push({ type: "section", name: name });
+        } else {
+          entries.push({
+            type: "item",
+            amount: row.querySelector('[name="ingredient_amount[]"]').value,
+            unit: row.querySelector('[name="ingredient_unit[]"]').value,
+            name: row.querySelector('[name="ingredient_name[]"]').value,
+            kcal: row.querySelector('[name="ingredient_kcal[]"]').value,
+            protein: row.querySelector('[name="ingredient_protein[]"]').value,
+            fat: row.querySelector('[name="ingredient_fat[]"]').value,
+            carbs: row.querySelector('[name="ingredient_carbs[]"]').value,
+          });
+        }
+      });
+      document.getElementById("ingredientsStructured").value = JSON.stringify(entries);
+    });
+
+    // ---------- KROKI: dodawanie / usuwanie wierszy + numeracja ----------
+    const stepsWrapper = document.getElementById("stepsWrapper");
+    const stepTemplate = document.getElementById("stepRowTemplate");
+
+    function renumberSteps() {
+      stepsWrapper.querySelectorAll(".step-row .step-number").forEach((el, idx) => {
+        el.textContent = (idx + 1) + ".";
+      });
+    }
+
+    document.getElementById("addStepBtn").addEventListener("click", () => {
+      const clone = stepTemplate.content.cloneNode(true);
+      stepsWrapper.appendChild(clone);
+      renumberSteps();
+    });
+
+    // Przesuwanie i usuwanie wierszy (delegacja zdarzeń — działa też dla dodanych dynamicznie)
+    document.getElementById("recipeForm").addEventListener("click", (e) => {
+      const moveBtn = e.target.closest(".btn-move-row");
+      if (moveBtn) {
+        const row = moveBtn.closest(".ingredient-row, .ingredient-section-row");
+        const dir = Number(moveBtn.dataset.dir);
+        if (dir < 0 && row.previousElementSibling) {
+          row.parentElement.insertBefore(row, row.previousElementSibling);
+        } else if (dir > 0 && row.nextElementSibling) {
+          row.parentElement.insertBefore(row.nextElementSibling, row);
+        }
+        return;
+      }
+
+      if (!e.target.classList.contains("btn-remove-row")) return;
+      const row = e.target.closest(".ingredient-row, .ingredient-section-row, .step-row");
+      const wrapper = row.parentElement;
+
+      // Sekcję można usunąć zawsze (jej składniki zostają na liście).
+      if (row.classList.contains("ingredient-section-row")) {
+        row.remove();
+        return;
+      }
+      // Ostatniego składnika / kroku nie usuwamy.
+      const rowSelector = row.classList.contains("step-row") ? ".step-row" : ".ingredient-row";
+      if (wrapper.querySelectorAll(":scope > " + rowSelector).length > 1) {
+        row.remove();
+        if (wrapper === stepsWrapper) renumberSteps();
+      }
+    });
+
+    // ---------- FORMA: pokazujemy odpowiednie pola zależnie od kształtu ----------
+    const panShapeSelect = document.getElementById("pan_shape");
+    const panSizeRound = document.getElementById("panSizeRound");
+    const panSizeRectWidth = document.getElementById("panSizeRectWidth");
+    const panSizeRectLength = document.getElementById("panSizeRectLength");
+
+    function updatePanFields() {
+      const shape = panShapeSelect.value;
+      panSizeRound.style.display = shape === "okragla" ? "" : "none";
+      panSizeRectWidth.style.display = shape === "prostokatna" ? "" : "none";
+      panSizeRectLength.style.display = shape === "prostokatna" ? "" : "none";
+    }
+    panShapeSelect.addEventListener("change", updatePanFields);
+    updatePanFields();
+  </script>
+{% endblock %}

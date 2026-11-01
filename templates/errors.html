@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Błąd {{ code }} – Wielka Księga Przepisów{% endblock %}
+
+{% block content %}
+  <div class="error-page">
+    <h1>{{ code }}</h1>
+    <p>{{ message }}</p>
+    <a class="btn" href="{{ url_for('index') }}">Wróć na stronę główną</a>
+  </div>
+{% endblock %}

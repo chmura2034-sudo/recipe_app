@@ -1,0 +1,519 @@
+{% extends "base.html" %}
+{% block title %}{{ recipe.title }} – Wielka Księga Przepisów{% endblock %}
+
+{% block content %}
+  <a class="back-link" href="{{ url_for('index') }}">&larr; Wróć do listy przepisów</a>
+
+  <article class="recipe-detail">
+    {% if recipe.image_url %}
+      <img class="recipe-detail-img" src="{{ recipe.image_url }}" alt="{{ recipe.title }}">
+    {% endif %}
+
+    <h1>{{ recipe.title }}</h1>
+    {% if recipe.description %}<p class="recipe-description">{{ recipe.description }}</p>{% endif %}
+
+    {% if recipe.status == "pending" %}
+      <div class="status-notice status-notice-pending">
+        ⏳ Ten przepis oczekuje na zatwierdzenie przez administratora — widzisz go, bo jesteś
+        jego autorem/autorką albo administratorem. Publicznie pojawi się dopiero po akceptacji.
+      </div>
+    {% elif recipe.status == "rejected" %}
+      <div class="status-notice status-notice-rejected">
+        ✕ Ten przepis został odrzucony przez administratora.
+        {% if recipe.rejection_reason %}<br>Powód: {{ recipe.rejection_reason }}{% endif %}
+      </div>
+    {% endif %}
+
+    <div class="recipe-meta">
+      {% if recipe.servings %}<span id="servingsMeta">🍽 Porcje: <span id="servingsValue">{{ recipe.servings }}</span></span>{% endif %}
+      {% if recipe.pan_shape %}<span id="panMeta">⬭ Forma: <span id="panValue">{{ recipe.pan_dimensions_display }}</span></span>{% endif %}
+    </div>
+
+    {% if recipe.tags %}
+      <div class="tag-list">
+        {% for tag in recipe.tags %}
+          <a class="tag-chip" href="{{ url_for('index', tag=tag.slug) }}">#{{ tag.name }}</a>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% set has_servings = recipe.servings %}
+    {% set has_pan = recipe.pan_shape and (recipe.pan_size_cm or (recipe.pan_width_cm and recipe.pan_length_cm)) %}
+    {% if has_servings or has_pan %}
+      <section class="scale-panel" id="scalePanel"
+                data-servings="{{ recipe.servings or '' }}"
+                data-pan-shape="{{ recipe.pan_shape or '' }}"
+                data-pan-size="{{ recipe.pan_size_cm or '' }}"
+                data-pan-width="{{ recipe.pan_width_cm or '' }}"
+                data-pan-length="{{ recipe.pan_length_cm or '' }}">
+        <h2>Przelicz przepis</h2>
+
+        {% if has_servings and has_pan %}
+          <div class="scale-mode-toggle">
+            <label><input type="radio" name="scaleMode" value="servings" checked> Wg liczby porcji</label>
+            <label><input type="radio" name="scaleMode" value="pan"> Wg wielkości blachy</label>
+          </div>
+        {% endif %}
+
+        {% if has_servings %}
+          <div id="scaleByServings" class="scale-fields">
+            <label for="targetServings">Docelowa liczba porcji</label>
+            <input type="number" id="targetServings" min="1" step="1" value="{{ recipe.servings }}">
+          </div>
+        {% endif %}
+
+        {% if has_pan %}
+          <div id="scaleByPan" class="scale-fields" style="{{ 'display:none;' if has_servings else '' }}">
+            <label for="targetPanShape">Docelowy kształt formy</label>
+            <select id="targetPanShape">
+              <option value="okragla" {{ "selected" if recipe.pan_shape == "okragla" else "" }}>okrągła</option>
+              <option value="prostokatna" {{ "selected" if recipe.pan_shape == "prostokatna" else "" }}>kwadratowa / prostokątna</option>
+            </select>
+
+            <div id="targetPanRoundFields" style="{{ '' if recipe.pan_shape == 'okragla' else 'display:none;' }}">
+              <label for="targetPanSize">Docelowa średnica formy (cm)</label>
+              <input type="number" id="targetPanSize" min="1" value="{{ recipe.pan_size_cm or '' }}">
+            </div>
+
+            <div id="targetPanRectFields" style="{{ '' if recipe.pan_shape == 'prostokatna' else 'display:none;' }}">
+              <label class="checkbox-inline">
+                <input type="checkbox" id="targetPanIsSquare"
+                       {{ "checked" if recipe.pan_width_cm and recipe.pan_length_cm and recipe.pan_width_cm == recipe.pan_length_cm else "" }}>
+                To kwadrat (oba boki równe)
+              </label>
+              <div class="form-row">
+                <div>
+                  <label for="targetPanWidth">Bok A (cm)</label>
+                  <input type="number" id="targetPanWidth" min="1" value="{{ recipe.pan_width_cm or '' }}">
+                </div>
+                <div id="targetPanLengthWrapper">
+                  <label for="targetPanLength">Bok B (cm)</label>
+                  <input type="number" id="targetPanLength" min="1" value="{{ recipe.pan_length_cm or '' }}">
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endif %}
+
+        <div class="scale-actions">
+          <button type="button" id="scaleApplyBtn" class="btn btn-small">Przelicz</button>
+          <button type="button" id="scaleResetBtn" class="btn btn-small btn-secondary">Przywróć oryginał</button>
+        </div>
+        <p id="scaleFactorInfo" class="scale-factor-info"></p>
+      </section>
+    {% endif %}
+
+    <section>
+      <h2>Składniki</h2>
+      <div id="ingredientsList">
+        {% for section in recipe.ingredients_sections %}
+          {% if section["items"] %}
+            {% if section.name %}<h3 class="ingredient-section-title">{{ section.name }}</h3>{% endif %}
+            <ul class="ingredients-list">
+              {% for item in section["items"] %}
+                <li>
+                  {% if item.amount or item.unit %}
+                    <span class="ingredient-amount"><span class="amount-value" data-original="{{ item.amount }}">{{ item.amount }}</span>{% if item.unit %} {{ item.unit }}{% endif %}</span>
+                  {% endif %}
+                  <span>{{ item.name }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      {% set totals = recipe.nutrition_totals %}
+      {% if totals.has_data %}
+        {% set per_serving = recipe.nutrition_per_serving %}
+        <div class="nutrition-summary" id="nutritionSummary">
+          <h3 class="nutrition-summary-title">Wartości odżywcze</h3>
+          <p class="field-hint">
+            Suma ze składników, dla których podano wartości — jeśli część składników ich nie ma,
+            to tylko orientacyjny dolny szacunek.
+          </p>
+          <div class="nutrition-grid">
+            <div class="nutrition-col">
+              <span class="nutrition-col-label">Cały przepis</span>
+              <ul class="nutrition-values">
+                <li><span class="nutrition-value" id="totalKcalValue" data-original="{{ totals.kcal }}">{{ totals.kcal | round(0) | int }}</span> kcal</li>
+                <li><span class="nutrition-value" id="totalProteinValue" data-original="{{ totals.protein }}">{{ totals.protein | round(1) }}</span> g białka</li>
+                <li><span class="nutrition-value" id="totalFatValue" data-original="{{ totals.fat }}">{{ totals.fat | round(1) }}</span> g tłuszczu</li>
+                <li><span class="nutrition-value" id="totalCarbsValue" data-original="{{ totals.carbs }}">{{ totals.carbs | round(1) }}</span> g węglowodanów</li>
+              </ul>
+            </div>
+            {% if per_serving %}
+              <div class="nutrition-col nutrition-col-serving">
+                <span class="nutrition-col-label">Na porcję</span>
+                <ul class="nutrition-values">
+                  <li class="nutrition-kcal-per-serving">
+                    <span class="nutrition-value" id="servingKcalValue" data-original="{{ per_serving.kcal }}">{{ per_serving.kcal | round(0) | int }}</span> kcal
+                  </li>
+                  <li><span class="nutrition-value" id="servingProteinValue" data-original="{{ per_serving.protein }}">{{ per_serving.protein | round(1) }}</span> g białka</li>
+                  <li><span class="nutrition-value" id="servingFatValue" data-original="{{ per_serving.fat }}">{{ per_serving.fat | round(1) }}</span> g tłuszczu</li>
+                  <li><span class="nutrition-value" id="servingCarbsValue" data-original="{{ per_serving.carbs }}">{{ per_serving.carbs | round(1) }}</span> g węglowodanów</li>
+                </ul>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    </section>
+
+    <section>
+      <div class="steps-header">
+        <h2>Sposób przygotowania</h2>
+        <button type="button" id="resetProgressBtn" class="btn btn-small btn-secondary">Wyczyść postęp</button>
+      </div>
+      <ul class="steps-checklist" id="stepsChecklist" data-recipe-slug="{{ recipe.slug }}">
+        {% for step in recipe.instructions_list %}
+          <li>
+            <label class="step-check-label">
+              <input type="checkbox" class="step-checkbox" data-step-index="{{ loop.index0 }}">
+              <span class="step-check-text">{{ step }}</span>
+            </label>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    {% if current_user.is_authenticated and current_user.is_admin %}
+      <div class="admin-actions">
+        <a class="btn" href="{{ url_for('recipe_edit', recipe_id=recipe.id) }}">Edytuj</a>
+        <form method="post" action="{{ url_for('recipe_delete', recipe_id=recipe.id) }}"
+              data-confirm="Na pewno usunąć ten przepis?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-danger" type="submit">Usuń</button>
+        </form>
+      </div>
+    {% elif current_user.is_authenticated and current_user.is_redaktor and recipe.author_id == current_user.id %}
+      <div class="admin-actions">
+        <a class="btn" href="{{ url_for('redaktor_recipe_edit', recipe_id=recipe.id) }}">Edytuj</a>
+        {% if recipe.status != "published" %}
+          <form method="post" action="{{ url_for('redaktor_recipe_delete', recipe_id=recipe.id) }}"
+                data-confirm="Na pewno usunąć ten przepis?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-danger" type="submit">Usuń</button>
+          </form>
+        {% endif %}
+      </div>
+    {% endif %}
+  </article>
+
+  <script nonce="{{ csp_nonce }}">
+    // Zaznaczanie wykonanych kroków — stan zapamiętywany lokalnie w przeglądarce (per przepis)
+    (function () {
+      const checklist = document.getElementById("stepsChecklist");
+      if (!checklist) return;
+
+      const storageKey = "recipe-progress-" + checklist.dataset.recipeSlug;
+      const checkboxes = checklist.querySelectorAll(".step-checkbox");
+
+      function loadProgress() {
+        let done = [];
+        try {
+          done = JSON.parse(localStorage.getItem(storageKey) || "[]");
+        } catch (e) {
+          done = [];
+        }
+        checkboxes.forEach((cb) => {
+          const idx = Number(cb.dataset.stepIndex);
+          cb.checked = done.includes(idx);
+          cb.closest("li").classList.toggle("step-done", cb.checked);
+        });
+      }
+
+      function saveProgress() {
+        const done = Array.from(checkboxes)
+          .filter((cb) => cb.checked)
+          .map((cb) => Number(cb.dataset.stepIndex));
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(done));
+        } catch (e) {
+          /* schowek/localStorage niedostępny - pomijamy zapis */
+        }
+      }
+
+      checkboxes.forEach((cb) => {
+        cb.addEventListener("change", () => {
+          cb.closest("li").classList.toggle("step-done", cb.checked);
+          saveProgress();
+        });
+      });
+
+      const resetBtn = document.getElementById("resetProgressBtn");
+      if (resetBtn) {
+        resetBtn.addEventListener("click", () => {
+          checkboxes.forEach((cb) => {
+            cb.checked = false;
+            cb.closest("li").classList.remove("step-done");
+          });
+          try {
+            localStorage.removeItem(storageKey);
+          } catch (e) {
+            /* noop */
+          }
+        });
+      }
+
+      loadProgress();
+    })();
+  </script>
+
+  <script nonce="{{ csp_nonce }}">
+    // Przeliczanie przepisu wg liczby porcji lub wielkości blachy
+    (function () {
+      const panel = document.getElementById("scalePanel");
+      if (!panel) return;
+
+      const originalServings = parseFloat(panel.dataset.servings) || null;
+      const panShape = panel.dataset.panShape || "";
+      const originalPanSize = parseFloat(panel.dataset.panSize) || null;
+      const originalPanWidth = parseFloat(panel.dataset.panWidth) || null;
+      const originalPanLength = parseFloat(panel.dataset.panLength) || null;
+
+      const amountEls = Array.from(document.querySelectorAll("#ingredientsList .amount-value"));
+      const servingsValueEl = document.getElementById("servingsValue");
+      const panValueEl = document.getElementById("panValue");
+      const infoEl = document.getElementById("scaleFactorInfo");
+
+      // Wartości odżywcze — skalują się razem ze składnikami (ten sam mnożnik `factor`).
+      const nutritionTotalEls = {
+        kcal: document.getElementById("totalKcalValue"),
+        protein: document.getElementById("totalProteinValue"),
+        fat: document.getElementById("totalFatValue"),
+        carbs: document.getElementById("totalCarbsValue"),
+      };
+      const nutritionServingEls = {
+        kcal: document.getElementById("servingKcalValue"),
+        protein: document.getElementById("servingProteinValue"),
+        fat: document.getElementById("servingFatValue"),
+        carbs: document.getElementById("servingCarbsValue"),
+      };
+      const nutritionDecimals = { kcal: 0, protein: 1, fat: 1, carbs: 1 };
+
+      function updateNutrition(newServingsCount, factor) {
+        for (const key of Object.keys(nutritionTotalEls)) {
+          const el = nutritionTotalEls[key];
+          if (!el) continue;
+          const original = parseFloat(el.dataset.original);
+          if (isNaN(original)) continue;
+          const newTotal = original * factor;
+          el.textContent = newTotal.toFixed(nutritionDecimals[key]).replace(/\.0$/, "");
+
+          const servingEl = nutritionServingEls[key];
+          if (servingEl && newServingsCount) {
+            servingEl.textContent = (newTotal / newServingsCount).toFixed(nutritionDecimals[key]).replace(/\.0$/, "");
+          }
+        }
+      }
+
+      function resetNutrition() {
+        for (const els of [nutritionTotalEls, nutritionServingEls]) {
+          for (const key of Object.keys(els)) {
+            const el = els[key];
+            if (!el) continue;
+            const original = parseFloat(el.dataset.original);
+            if (isNaN(original)) continue;
+            el.textContent = original.toFixed(nutritionDecimals[key]).replace(/\.0$/, "");
+          }
+        }
+      }
+
+      const modeRadios = document.querySelectorAll('input[name="scaleMode"]');
+      const scaleByServingsDiv = document.getElementById("scaleByServings");
+      const scaleByPanDiv = document.getElementById("scaleByPan");
+
+      const targetPanShapeSelect = document.getElementById("targetPanShape");
+      const targetPanRoundFields = document.getElementById("targetPanRoundFields");
+      const targetPanRectFields = document.getElementById("targetPanRectFields");
+      const targetPanIsSquare = document.getElementById("targetPanIsSquare");
+      const targetPanLengthWrapper = document.getElementById("targetPanLengthWrapper");
+      const targetPanWidthInput = document.getElementById("targetPanWidth");
+      const targetPanLengthInput = document.getElementById("targetPanLength");
+
+      function currentMode() {
+        const checked = document.querySelector('input[name="scaleMode"]:checked');
+        if (checked) return checked.value;
+        // brak przełącznika trybu -> dostępny jest tylko jeden tryb
+        return scaleByServingsDiv ? "servings" : "pan";
+      }
+
+      function updateModeVisibility() {
+        const mode = currentMode();
+        if (scaleByServingsDiv) scaleByServingsDiv.style.display = mode === "servings" ? "" : "none";
+        if (scaleByPanDiv) scaleByPanDiv.style.display = mode === "pan" ? "" : "none";
+      }
+      modeRadios.forEach((r) => r.addEventListener("change", updateModeVisibility));
+
+      // ---------- przełączanie docelowego kształtu formy (okrągła <-> kwadratowa/prostokątna) ----------
+      function updateTargetShapeVisibility() {
+        if (!targetPanShapeSelect) return;
+        const shape = targetPanShapeSelect.value;
+        if (targetPanRoundFields) targetPanRoundFields.style.display = shape === "okragla" ? "" : "none";
+        if (targetPanRectFields) targetPanRectFields.style.display = shape === "prostokatna" ? "" : "none";
+      }
+      if (targetPanShapeSelect) targetPanShapeSelect.addEventListener("change", updateTargetShapeVisibility);
+
+      function updateSquareFieldVisibility() {
+        if (!targetPanIsSquare) return;
+        if (targetPanLengthWrapper) targetPanLengthWrapper.style.display = targetPanIsSquare.checked ? "none" : "";
+      }
+      if (targetPanIsSquare) {
+        targetPanIsSquare.addEventListener("change", updateSquareFieldVisibility);
+        updateSquareFieldVisibility();
+      }
+
+      // format liczby: max 2 miejsca po przecinku, bez zbędnych zer
+      function formatNumber(n) {
+        const rounded = Math.round(n * 100) / 100;
+        if (Number.isInteger(rounded)) return String(rounded);
+        return String(rounded).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+      }
+
+      function panDimensionsText(shape, size, width, length) {
+        if (shape === "okragla" && size) return `okrągła, ${formatNumber(size)} cm`;
+        if (shape === "prostokatna" && width && length) {
+          if (Math.abs(width - length) < 0.01) return `kwadratowa, ${formatNumber(width)} cm`;
+          return `prostokątna, ${formatNumber(width)}x${formatNumber(length)} cm`;
+        }
+        return "";
+      }
+
+      // Pole powierzchni formy niezależnie od kształtu — używane do przeliczania między
+      // formą okrągłą a kwadratową/prostokątną.
+      function areaFor(shape, size, width, length) {
+        if (shape === "okragla" && size) return Math.PI * Math.pow(size / 2, 2);
+        if (shape === "prostokatna" && width && length) return width * length;
+        return null;
+      }
+
+      const originalArea = areaFor(panShape, originalPanSize, originalPanWidth, originalPanLength);
+
+      function applyScale(factor, mode, targets) {
+        amountEls.forEach((el) => {
+          const orig = parseFloat((el.dataset.original || "").replace(",", "."));
+          if (isNaN(orig)) return; // ilość opisowa (np. "do smaku") - zostawiamy bez zmian
+          el.textContent = formatNumber(orig * factor);
+        });
+
+        if (mode === "servings") {
+          if (servingsValueEl) servingsValueEl.textContent = formatNumber(targets.servings);
+          if (panValueEl && originalPanSize) {
+            const scaledSize = originalPanSize * Math.sqrt(factor);
+            panValueEl.textContent = "≈ " + panDimensionsText(panShape, scaledSize);
+          } else if (panValueEl && originalPanWidth && originalPanLength) {
+            const scale = Math.sqrt(factor);
+            panValueEl.textContent =
+              "≈ " + panDimensionsText(panShape, null, originalPanWidth * scale, originalPanLength * scale);
+          }
+        } else if (mode === "pan") {
+          if (panValueEl) {
+            panValueEl.textContent = panDimensionsText(
+              targets.shape || panShape,
+              targets.panSize,
+              targets.panWidth,
+              targets.panLength
+            );
+          }
+          if (servingsValueEl && originalServings) {
+            servingsValueEl.textContent = "≈ " + formatNumber(originalServings * factor);
+          }
+        }
+
+        const newServingsCount = mode === "servings" ? targets.servings : originalServings ? originalServings * factor : null;
+        updateNutrition(newServingsCount, factor);
+
+        if (infoEl) {
+          infoEl.textContent = `Przepis przeliczony (mnożnik ×${factor.toFixed(2)}).`;
+        }
+      }
+
+      function resetScale() {
+        amountEls.forEach((el) => {
+          el.textContent = el.dataset.original;
+        });
+        resetNutrition();
+        if (servingsValueEl && originalServings) servingsValueEl.textContent = formatNumber(originalServings);
+        if (panValueEl) {
+          panValueEl.textContent = panDimensionsText(
+            panShape,
+            originalPanSize,
+            originalPanWidth,
+            originalPanLength
+          );
+        }
+        if (infoEl) infoEl.textContent = "";
+
+        const targetServings = document.getElementById("targetServings");
+        if (targetServings && originalServings) targetServings.value = originalServings;
+        const targetPanSize = document.getElementById("targetPanSize");
+        if (targetPanSize && originalPanSize) targetPanSize.value = originalPanSize;
+        if (targetPanWidthInput && originalPanWidth) targetPanWidthInput.value = originalPanWidth;
+        if (targetPanLengthInput && originalPanLength) targetPanLengthInput.value = originalPanLength;
+
+        if (targetPanShapeSelect) {
+          targetPanShapeSelect.value = panShape;
+          updateTargetShapeVisibility();
+        }
+        if (targetPanIsSquare) {
+          targetPanIsSquare.checked =
+            !!(originalPanWidth && originalPanLength && Math.abs(originalPanWidth - originalPanLength) < 0.01);
+          updateSquareFieldVisibility();
+        }
+      }
+
+      document.getElementById("scaleApplyBtn").addEventListener("click", () => {
+        const mode = currentMode();
+
+        if (mode === "servings") {
+          const target = parseFloat(document.getElementById("targetServings").value);
+          if (!originalServings || isNaN(target) || target <= 0) {
+            if (infoEl) infoEl.textContent = "Podaj poprawną liczbę porcji.";
+            return;
+          }
+          applyScale(target / originalServings, "servings", { servings: target });
+          return;
+        }
+
+        if (mode === "pan") {
+          const targetShape = targetPanShapeSelect ? targetPanShapeSelect.value : panShape;
+          let targetArea = null;
+          let targets = {};
+
+          if (targetShape === "okragla") {
+            const targetSize = parseFloat(document.getElementById("targetPanSize").value);
+            if (isNaN(targetSize) || targetSize <= 0) {
+              if (infoEl) infoEl.textContent = "Podaj poprawną średnicę formy.";
+              return;
+            }
+            targetArea = areaFor("okragla", targetSize, null, null);
+            targets = { shape: targetShape, panSize: targetSize };
+          } else if (targetShape === "prostokatna") {
+            const targetWidth = parseFloat(targetPanWidthInput.value);
+            const isSquare = targetPanIsSquare && targetPanIsSquare.checked;
+            const targetLength = isSquare ? targetWidth : parseFloat(targetPanLengthInput.value);
+            if (isNaN(targetWidth) || isNaN(targetLength) || targetWidth <= 0 || targetLength <= 0) {
+              if (infoEl) infoEl.textContent = "Podaj poprawne wymiary formy.";
+              return;
+            }
+            targetArea = areaFor("prostokatna", null, targetWidth, targetLength);
+            targets = { shape: targetShape, panWidth: targetWidth, panLength: targetLength };
+          }
+
+          if (!originalArea || !targetArea) {
+            if (infoEl) infoEl.textContent = "Brak danych o oryginalnej wielkości formy — nie można przeliczyć.";
+            return;
+          }
+
+          applyScale(targetArea / originalArea, "pan", targets);
+        }
+      });
+
+      document.getElementById("scaleResetBtn").addEventListener("click", resetScale);
+
+      updateModeVisibility();
+      updateTargetShapeVisibility();
+    })();
+  </script>
+{% endblock %}

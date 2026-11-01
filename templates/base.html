@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Wielka Księga Przepisów{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('index') }}">
+      <img src="{{ url_for('static', filename='logo.png') }}" alt="Wielka Księga Przepisów" class="brand-logo">
+      <span>Wielka Księga Przepisów</span>
+    </a>
+    <nav>
+      {% if current_user.is_authenticated %}
+        {% if current_user.is_admin %}
+          <a href="{{ url_for('admin_dashboard') }}">Panel administratora</a>
+        {% else %}
+          <a href="{{ url_for('redaktor_dashboard') }}">Panel redaktora</a>
+        {% endif %}
+        <a href="{{ url_for('change_own_password') }}">Zmień hasło</a>
+        <form method="post" action="{{ url_for('logout') }}" class="nav-logout-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="nav-link-button">Wyloguj ({{ current_user.username }})</button>
+        </form>
+      {% else %}
+        <a href="{{ url_for('login') }}">Zaloguj się</a>
+      {% endif %}
+    </nav>
+  </header>
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flashes">
+          {% for category, message in messages %}
+            <li class="flash flash-{{ category }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <p>&copy; {{ 2026 }} Wielka Księga Przepisów</p>
+  </footer>
+</body>
+</html>

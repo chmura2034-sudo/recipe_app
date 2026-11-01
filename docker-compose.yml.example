@@ -1,0 +1,24 @@
+# Przykład: skopiuj do docker-compose.yml, uzupełnij .env (patrz .env.example).
+#
+# Użycie:
+#   docker compose run --rm app flask db upgrade   # najpierw migracja schematu
+#   docker compose run --rm app flask create-admin --username admin
+#   docker compose up -d
+
+services:
+  app:
+    build: .
+    env_file: .env
+    environment:
+      # W kontenerze baza i zdjęcia żyją w wolumenach (patrz niżej), nie w warstwie obrazu.
+      DATABASE_URL: sqlite:////data/recipes.db
+    volumes:
+      - db-data:/data
+      - uploads-data:/app/static/uploads
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  uploads-data:

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Wszystkie przepisy – Wielka Księga Przepisów{% endblock %}
+
+{% block content %}
+  <h1>Przepisy</h1>
+
+  <form class="search-form" method="get" action="{{ url_for('index') }}">
+    <input type="text" name="q" placeholder="Szukaj przepisu…" value="{{ query }}">
+    {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag.slug }}">{% endif %}
+    <button type="submit">Szukaj</button>
+  </form>
+
+  {% if all_tags %}
+    <div class="tag-list tag-filter">
+      <a class="tag-chip {{ 'tag-chip-active' if not active_tag else '' }}"
+         href="{{ url_for('index', q=query) if query else url_for('index') }}">Wszystkie</a>
+      {% for tag in all_tags %}
+        <a class="tag-chip {{ 'tag-chip-active' if active_tag and active_tag.id == tag.id else '' }}"
+           href="{{ url_for('index', tag=tag.slug, q=query) if query else url_for('index', tag=tag.slug) }}">#{{ tag.name }}</a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if recipes %}
+    <div class="recipe-grid">
+      {% for recipe in recipes %}
+        <a class="recipe-card" href="{{ url_for('recipe_detail', slug=recipe.slug) }}">
+          {% if recipe.image_url %}
+            <img src="{{ recipe.image_url }}" alt="{{ recipe.title }}">
+          {% else %}
+            <div class="recipe-card-placeholder">🍽️</div>
+          {% endif %}
+          <div class="recipe-card-body">
+            <h2>{{ recipe.title }}</h2>
+            {% if recipe.description %}<p>{{ recipe.description }}</p>{% endif %}
+            <div class="recipe-meta">
+              {% if recipe.servings %}<span>🍽 {{ recipe.servings }} porcji</span>{% endif %}
+              {% if recipe.pan_shape %}<span>⬭ {{ recipe.pan_dimensions_display }}</span>{% endif %}
+            </div>
+            {% if recipe.tags %}
+              <div class="tag-list">
+                {% for tag in recipe.tags %}<span class="tag-chip tag-chip-static">#{{ tag.name }}</span>{% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="empty-state">
+      Brak przepisów{% if query %} pasujących do „{{ query }}”{% endif %}{% if active_tag %} z tagiem #{{ active_tag.name }}{% endif %}.
+    </p>
+  {% endif %}
+{% endblock %}

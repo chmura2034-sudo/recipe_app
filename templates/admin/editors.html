@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Redaktorzy – Wielka Księga Przepisów{% endblock %}
+
+{% block content %}
+  <a class="back-link" href="{{ url_for('admin_dashboard') }}">&larr; Wróć do panelu administratora</a>
+
+  <h1>Konta redaktorów</h1>
+  <p class="muted-info">
+    Redaktor może tworzyć i edytować własne przepisy, ale trafiają one do kolejki
+    zatwierdzania — publicznie widoczne stają się dopiero, gdy Ty (administrator) je zaakceptujesz.
+  </p>
+
+  <section class="backup-section">
+    <h2>Dodaj nowego redaktora</h2>
+    <form method="post" action="{{ url_for('editor_create') }}" class="styled-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <label for="username">Nazwa użytkownika</label>
+      <input type="text" id="username" name="username" required>
+
+      <label for="password">Hasło (min. {{ min_password_length }} znaków)</label>
+      <input type="password" id="password" name="password" required minlength="{{ min_password_length }}">
+
+      <button type="submit" class="btn">+ Utwórz konto redaktora</button>
+    </form>
+  </section>
+
+  <section class="backup-section">
+    <h2>Istniejący redaktorzy ({{ editors|length }})</h2>
+    {% if editors %}
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Nazwa użytkownika</th>
+            <th>Liczba przepisów</th>
+            <th>Akcje</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for editor in editors %}
+            <tr>
+              <td>
+                {{ editor.username }}
+                {% if editor.is_locked() %}<span class="status-badge status-rejected">🔒 zablokowane</span>{% endif %}
+              </td>
+              <td>{{ editor.recipes|length }}</td>
+              <td class="admin-table-actions">
+                <button type="button" class="btn btn-small btn-secondary"
+                        data-toggle-target="reset-pwd-{{ editor.id }}">Resetuj hasło</button>
+                <form method="post" action="{{ url_for('editor_delete', user_id=editor.id) }}"
+                      data-confirm="Usunąć konto redaktora „{{ editor.username }}”? Jego przepisy zostaną, ale bez przypisanego autora.">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="btn btn-small btn-danger" type="submit">Usuń konto</button>
+                </form>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="3">
+                <form method="post" action="{{ url_for('editor_reset_password', user_id=editor.id) }}"
+                      class="reject-form" id="reset-pwd-{{ editor.id }}" style="display:none;">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <label for="reset-pwd-input-{{ editor.id }}">
+                    Nowe hasło dla „{{ editor.username }}” (min. {{ min_password_length }} znaków)
+                  </label>
+                  <input type="password" id="reset-pwd-input-{{ editor.id }}" name="password"
+                         required minlength="{{ min_password_length }}" autocomplete="new-password">
+                  <button type="submit" class="btn btn-small btn-secondary">Ustaw nowe hasło</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty-state">Nie utworzono jeszcze żadnego konta redaktora.</p>
+    {% endif %}
+  </section>
+{% endblock %}

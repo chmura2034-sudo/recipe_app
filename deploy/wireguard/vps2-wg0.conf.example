@@ -1,0 +1,26 @@
+# /etc/wireguard/wg0.conf na VPS2 (backend, za WireGuardem, hostuje appki na portach).
+#
+# Instalacja (Ubuntu/Debian):
+#   sudo apt update && sudo apt install -y wireguard
+#
+# Wygeneruj klucze (osobno na VPS2):
+#   wg genkey | tee /etc/wireguard/vps2-private.key | wg pubkey > /etc/wireguard/vps2-public.key
+#   sudo chmod 600 /etc/wireguard/vps2-private.key
+#
+# Podmień PRIVATE_KEY_VPS2 na zawartość vps2-private.key,
+# a PUBLIC_KEY_VPS1 na klucz publiczny wygenerowany NA VPS1.
+
+[Interface]
+Address = 10.10.10.2/24
+PrivateKey = PRIVATE_KEY_VPS2
+# VPS2 nie musi nasłuchiwać na stałym porcie ani mieć publicznego IP,
+# jeśli to on inicjuje połączenie do VPS1 (patrz Endpoint niżej).
+# Jeśli jednak VPS2 też ma publiczne IP i wolisz łączyć się w obie strony, odkomentuj:
+# ListenPort = 51820
+
+[Peer]
+# VPS1 (edge) — to jego adres publiczny, NIE adres w tunelu.
+PublicKey = PUBLIC_KEY_VPS1
+Endpoint = ADRES_PUBLICZNY_VPS1:51820
+AllowedIPs = 10.10.10.1/32
+PersistentKeepalive = 25
