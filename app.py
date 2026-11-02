@@ -790,6 +790,62 @@ def create_app(config_class=None):
     def offline_page():
         return render_template("offline.html")
 
+    # ---------- SEO: mapa witryny dla wyszukiwarek ----------
+    @app.route("/sitemap.xml")
+    def sitemap_xml():
+        from xml.sax.saxutils import escape
+
+        def entry(loc, lastmod=None):
+            parts = [f"<loc>{escape(loc)}</loc>"]
+            if lastmod:
+                parts.append(f"<lastmod>{lastmod.strftime('%Y-%m-%d')}</lastmod>")
+            return "<url>" + "".join(parts) + "</url>"
+
+        urls = [entry(url_for("index", _external=True)), entry(url_for("blog_index", _external=True))]
+        for slug, updated in (
+            db.session.query(Recipe.slug, Recipe.updated_at)
+            .filter(Recipe.status == "published")
+            .order_by(Recipe.id)
+        ):
+            urls.append(entry(url_for("recipe_detail", slug=slug, _external=True), updated))
+        for slug, updated in (
+            db.session.query(BlogPost.slug, BlogPost.updated_at)
+            .filter(BlogPost.status == "published")
+            .order_by(BlogPost.id)
+        ):
+            urls.append(entry(url_for("blog_detail", slug=slug, _external=True), updated))
+
+        xml = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            + "\n".join(urls)
+            + "\n</urlset>\n"
+        )
+        response = app.response_class(xml, mimetype="application/xml")
+        response.headers["Cache-Control"] = "public, max-age=3600"
+        return response
+
+    @app.route("/robots.txt")
+    def robots_txt():
+        # Panele, logowanie i strony z danymi tylko z localStorage nie mają czego szukać w wynikach.
+        disallowed = [
+            "/admin",
+            "/redakcja",
+            "/login",
+            "/logout",
+            "/konto",
+            "/api/",
+            "/healthz",
+            "/offline",
+            "/lista-zakupow",
+            "/ulubione",
+        ]
+        lines = ["User-agent: *", *(f"Disallow: {path}" for path in disallowed), ""]
+        lines.append(f"Sitemap: {url_for('sitemap_xml', _external=True)}")
+        response = app.response_class("\n".join(lines) + "\n", mimetype="text/plain")
+        response.headers["Cache-Control"] = "public, max-age=86400"
+        return response
+
     # ---------- lista zakupów i ulubione (dane w localStorage przeglądarki) ----------
     @app.route("/lista-zakupow")
     def shopping_list():

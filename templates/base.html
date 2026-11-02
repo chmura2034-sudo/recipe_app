@@ -5,6 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#a3461f">
   <title>{% block title %}Szczypta Smaku{% endblock %}</title>
+  {# SEO: podstrony nadpisują bloki description / og_type / og_image. #}
+  <meta name="description" content="{% block description %}Szczypta Smaku – sprawdzone przepisy kulinarne z przeliczaniem porcji, listą zakupów i minutnikami oraz blog kulinarny.{% endblock %}">
+  {% if request.endpoint and request.view_args is not none %}
+    {# Adres bez parametrów (?q=, ?sort=…) - wyniki wyszukiwania i filtry nie są osobnymi stronami. #}
+    <link rel="canonical" href="{{ url_for(request.endpoint, _external=True, **request.view_args) }}">
+    <meta property="og:url" content="{{ url_for(request.endpoint, _external=True, **request.view_args) }}">
+  {% endif %}
+  <meta property="og:site_name" content="Szczypta Smaku">
+  <meta property="og:locale" content="pl_PL">
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+  <meta property="og:title" content="{{ self.title() }}">
+  <meta property="og:description" content="{{ self.description() }}">
+  <meta property="og:image" content="{% block og_image %}{{ url_for('static', filename='icons/icon-512.png', _external=True) }}{% endblock %}">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
   <link rel="manifest" href="{{ url_for('web_manifest') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">

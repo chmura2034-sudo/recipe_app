@@ -1,5 +1,11 @@
 {% extends "base.html" %}
 {% block title %}{{ post.title }} – Blog – Szczypta Smaku{% endblock %}
+{% block description %}{{ post.summary | truncate(200) }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_image %}{% if post.image_url %}{{ request.host_url.rstrip('/') ~ post.image_url }}{% else %}{{ super() }}{% endif %}{% endblock %}
+{% block head %}
+  {% if post.status != "published" %}<meta name="robots" content="noindex">{% endif %}
+{% endblock %}
 
 {% block content %}
   <a class="back-link" href="{{ url_for('blog_index') }}">&larr; Wszystkie wpisy</a>

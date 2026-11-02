@@ -1,5 +1,4 @@
 {
-  "0": "App Factory & Backup",
   "2": "README Docs & Security",
   "3": "Users & Editor Accounts",
   "4": "App Imports",
@@ -10,6 +9,5 @@
   "11": "Access Decorators",
   "13": "Logo Branding",
   "14": "SQLite Pragmas",
-  "16": "WSGI Entry",
-  "17": "Frontend JS"
+  "16": "WSGI Entry"
 }

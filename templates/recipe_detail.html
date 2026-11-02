@@ -2,12 +2,11 @@
 {% from "_recipe_card.html" import recipe_card %}
 {% block title %}{{ recipe.title }} – Szczypta Smaku{% endblock %}
 
+{% block description %}{% if recipe.description %}{{ recipe.description | truncate(200) }}{% else %}{{ recipe.title }} – sprawdzony przepis krok po kroku z listą składników. Szczypta Smaku.{% endif %}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_image %}{% if recipe.image_url %}{{ request.host_url.rstrip('/') ~ recipe.image_url }}{% else %}{{ super() }}{% endif %}{% endblock %}
+
 {% block head %}
-  {% if recipe.description %}<meta name="description" content="{{ recipe.description }}">{% endif %}
-  <meta property="og:type" content="article">
-  <meta property="og:title" content="{{ recipe.title }}">
-  {% if recipe.description %}<meta property="og:description" content="{{ recipe.description }}">{% endif %}
-  {% if recipe.image_url %}<meta property="og:image" content="{{ request.host_url.rstrip('/') ~ recipe.image_url }}">{% endif %}
   {% if recipe_jsonld %}
     {# |tojson escapuje <, >, & i ' - treść przepisu nie może zamknąć znacznika <script>. #}
     <script type="application/ld+json" nonce="{{ csp_nonce }}">{{ recipe_jsonld | tojson }}</script>
