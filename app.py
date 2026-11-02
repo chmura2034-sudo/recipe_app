@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import io
 import json
 import logging
@@ -5,10 +7,11 @@ import os
 import re
 import secrets
 import sqlite3
+import time
 import unicodedata
 import uuid
 import zipfile
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from functools import wraps
 from urllib.parse import urlparse
 
@@ -27,19 +30,28 @@ from flask_migrate import Migrate
 from flask_wtf import CSRFProtect
 from flask_wtf.csrf import CSRFError
 from PIL import Image, UnidentifiedImageError
-from sqlalchemy import event, text
+from sqlalchemy import event, func, text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.engine import Engine
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from config import get_config, validate_production_config
 from models import (
+    COMMENT_CONTENT_MAX,
+    COMMENT_NAME_MAX,
+    COMMENT_STATUSES,
+    DIFFICULTIES,
     INGREDIENT_UNITS,
     PAN_SHAPES,
     RECIPE_STATUSES,
     ROLES,
+    BLOG_IMAGE_PREFIX,
     BlogPost,
+    Comment,
+    DailyView,
     Recipe,
+    RecipeRating,
     Tag,
     User,
     db,
@@ -117,6 +129,81 @@ def is_safe_redirect_target(target) -> bool:
     if parsed.scheme or parsed.netloc:
         return False
     return target.startswith("/") and not target.startswith("//")
+
+
+# ---------- wyszukiwanie po składnikach ----------
+# Składniki, które ma prawie każdy — nie liczymy ich jako „brakujące".
+# Początki słów (bez polskich znaków), żeby objąć odmianę: sól/soli, cukier/cukru, woda/wody...
+PANTRY_BASICS = ("sol", "pieprz", "wod", "cukier", "cukr", "olej", "oliw")
+_INGREDIENT_STOPWORDS = {"i", "oraz", "lub", "albo", "a", "z", "ze", "w", "mam", "troche", "do", "smaku"}
+
+
+def _fold(text: str) -> str:
+    """Małe litery bez polskich znaków: 'Mąka' -> 'maka', 'Żółtka' -> 'zoltka'."""
+    text = str(text).lower().replace("ł", "l")
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+
+
+def _stem(word: str) -> str:
+    """Bardzo prosty „rdzeń" polskiego słowa — obcina końcówkę fleksyjną, by 'jajka', 'jajko'
+    i 'jaj' oraz 'mąka'/'mąki'/'mąkę' pasowały do siebie."""
+    if len(word) >= 6:
+        return word[:-2]
+    if len(word) >= 4:
+        return word[:-1]
+    return word
+
+
+def parse_ingredient_terms(text: str):
+    """'jajka, mąkę i mleko' -> [('jajka', 'jajk'), ('mąkę', 'mak'), ('mleko', 'mlek')]."""
+    terms = []
+    for chunk in re.split(r"[,;\n]+|\s+i\s+|\s+oraz\s+", text):
+        words = [w for w in re.findall(r"[\w-]+", _fold(chunk)) if w not in _INGREDIENT_STOPWORDS]
+        if not words:
+            continue
+        stems = [_stem(w) for w in words if len(w) >= 3]
+        if stems:
+            terms.append((chunk.strip(), stems))
+    return terms[:15]
+
+
+def _ingredient_matches(name: str, stems) -> bool:
+    folded_words = re.findall(r"[\w-]+", _fold(name))
+    return all(any(w.startswith(stem) for w in folded_words) for stem in stems)
+
+
+def match_recipe_ingredients(recipe, terms):
+    """Porównuje składniki przepisu z listą tego, co ma użytkownik."""
+    names = [item["name"] for item in recipe.ingredients_list]
+    matched_terms, matched_names = [], set()
+    for label, stems in terms:
+        hits = [n for n in names if _ingredient_matches(n, stems)]
+        if hits:
+            matched_terms.append(label)
+            matched_names.update(hits)
+    def is_basic(name):
+        words = re.findall(r"\w+", _fold(name))
+        # Tylko krótkie nazwy („sól", „cukru", „oliwa z oliwek") — „cukier puder" czy
+        # „sól morska" to wciąż podstawy, ale „sos sojowy" już nie (inny początek).
+        return bool(words) and words[0].startswith(PANTRY_BASICS)
+
+    countable = [n for n in names if not is_basic(n)]
+    missing = [n for n in countable if n not in matched_names]
+    return {
+        "matched_terms": matched_terms,
+        "matched": [n for n in countable if n in matched_names],
+        "missing": missing,
+        "total": len(countable),
+    }
+
+
+# Odwołania do wgranych zdjęć w treści wpisu na blogu (Markdown) — do kopii zapasowej.
+BLOG_UPLOAD_REF_RE = re.compile(r"/static/uploads/([A-Za-z0-9_-]+\.[A-Za-z0-9]+)")
+
+# Strony publiczne, które service worker (PWA) może zapisać do czytania offline.
+OFFLINE_CACHEABLE_ENDPOINTS = {
+    "index", "recipe_detail", "blog_index", "blog_detail", "shopping_list", "favorites", "offline_page",
+}
 
 
 def validate_new_password(password: str, min_length: int):
@@ -249,6 +336,8 @@ def create_app(config_class=None):
             "img-src 'self' data:; "
             "font-src 'self'; "
             "connect-src 'self'; "
+            "worker-src 'self'; "
+            "manifest-src 'self'; "
             "object-src 'none'; "
             "base-uri 'self'; "
             "form-action 'self'; "
@@ -265,6 +354,15 @@ def create_app(config_class=None):
         # zawierają nonce, token CSRF i dane zależne od zalogowanego użytkownika.
         if response.mimetype == "text/html":
             response.headers["Cache-Control"] = "private, no-store"
+            # Service worker (PWA) zapisuje do czytania offline TYLKO publiczne strony oglądane
+            # przez niezalogowanych — nigdy panelu ani stron z danymi zalogowanego użytkownika.
+            if (
+                response.status_code == 200
+                and request.method == "GET"
+                and request.endpoint in OFFLINE_CACHEABLE_ENDPOINTS
+                and not current_user.is_authenticated
+            ):
+                response.headers["X-Offline-Cacheable"] = "1"
         return response
 
     # ---------- loader dla Flask-Login ----------
@@ -273,11 +371,34 @@ def create_app(config_class=None):
         return db.session.get(User, int(user_id))
 
     # ---------- widoki publiczne ----------
+    # Sortowanie listy przepisów (pkt: najnowsze / najlepiej oceniane / komentowane / najszybsze / A–Z).
+    SORT_OPTIONS = {
+        "nowe": "Najnowsze",
+        "ocena": "Najlepiej oceniane",
+        "popularne": "Najpopularniejsze (30 dni)",
+        "komentarze": "Najczęściej komentowane",
+        "czas": "Najszybsze",
+        "az": "Alfabetycznie",
+    }
+    # Filtr „maksymalny czas przygotowania" (minuty -> etykieta).
+    TIME_FILTERS = {15: "do 15 min", 30: "do 30 min", 60: "do 1 h", 120: "do 2 h"}
+
     @app.route("/")
     def index():
         query = request.args.get("q", "").strip()
         tag_slug = request.args.get("tag", "").strip()
-        recipes_query = Recipe.query.filter_by(status="published").order_by(Recipe.created_at.desc())
+        sort = request.args.get("sort", "nowe")
+        if sort not in SORT_OPTIONS:
+            sort = "nowe"
+        max_time = request.args.get("czas", type=int)
+        if max_time not in TIME_FILTERS:
+            max_time = None
+        difficulty = request.args.get("trudnosc", "")
+        if difficulty not in DIFFICULTIES:
+            difficulty = ""
+        ingredients_query = request.args.get("skladniki", "").strip()
+
+        recipes_query = Recipe.query.filter(Recipe.status == "published")
         if query:
             recipes_query = recipes_query.filter(Recipe.title.ilike(f"%{_escape_like(query)}%", escape="\\"))
         active_tag = None
@@ -285,10 +406,84 @@ def create_app(config_class=None):
             active_tag = Tag.query.filter_by(slug=tag_slug).first()
             if active_tag:
                 recipes_query = recipes_query.filter(Recipe.tags.contains(active_tag))
+        if max_time:
+            recipes_query = recipes_query.filter(Recipe.prep_time_min.isnot(None), Recipe.prep_time_min <= max_time)
+        if difficulty:
+            recipes_query = recipes_query.filter(Recipe.difficulty == difficulty)
+
+        if sort == "ocena":
+            ratings = (
+                db.session.query(
+                    RecipeRating.recipe_id.label("rid"),
+                    func.avg(RecipeRating.score).label("avg"),
+                    func.count(RecipeRating.id).label("cnt"),
+                )
+                .group_by(RecipeRating.recipe_id)
+                .subquery()
+            )
+            recipes_query = recipes_query.outerjoin(ratings, ratings.c.rid == Recipe.id).order_by(
+                ratings.c.avg.is_(None), ratings.c.avg.desc(), ratings.c.cnt.desc(), Recipe.created_at.desc()
+            )
+        elif sort == "popularne":
+            views = (
+                db.session.query(DailyView.object_id.label("rid"), func.sum(DailyView.views).label("cnt"))
+                .filter(DailyView.kind == "recipe", DailyView.day >= date.today() - timedelta(days=29))
+                .group_by(DailyView.object_id)
+                .subquery()
+            )
+            recipes_query = recipes_query.outerjoin(views, views.c.rid == Recipe.id).order_by(
+                func.coalesce(views.c.cnt, 0).desc(), Recipe.created_at.desc()
+            )
+        elif sort == "komentarze":
+            comment_counts = (
+                db.session.query(Comment.recipe_id.label("rid"), func.count(Comment.id).label("cnt"))
+                .filter(Comment.status == "published", Comment.recipe_id.isnot(None))
+                .group_by(Comment.recipe_id)
+                .subquery()
+            )
+            recipes_query = recipes_query.outerjoin(comment_counts, comment_counts.c.rid == Recipe.id).order_by(
+                func.coalesce(comment_counts.c.cnt, 0).desc(), Recipe.created_at.desc()
+            )
+        elif sort == "czas":
+            recipes_query = recipes_query.order_by(
+                Recipe.prep_time_min.is_(None), Recipe.prep_time_min.asc(), Recipe.title.asc()
+            )
+        elif sort == "az":
+            recipes_query = recipes_query.order_by(Recipe.title.asc())
+        else:
+            recipes_query = recipes_query.order_by(Recipe.created_at.desc())
+
         recipes = recipes_query.all()
+
+        # Wyszukiwanie po składnikach („mam jajka, mąkę i mleko"): zostają przepisy, które
+        # zawierają choć jeden podany składnik; najpierw te, w których pasuje najwięcej
+        # podanych składników, a przy remisie — te, którym brakuje najmniej.
+        matches = {}
+        if ingredients_query:
+            terms = parse_ingredient_terms(ingredients_query)
+            for recipe in recipes:
+                match = match_recipe_ingredients(recipe, terms)
+                if match["matched_terms"]:
+                    matches[recipe.id] = match
+            recipes = [r for r in recipes if r.id in matches]
+            recipes.sort(key=lambda r: (-len(matches[r.id]["matched_terms"]), len(matches[r.id]["missing"])))
+
         all_tags = Tag.query.order_by(Tag.name).all()
         return render_template(
-            "index.html", recipes=recipes, query=query, all_tags=all_tags, active_tag=active_tag
+            "index.html",
+            recipes=recipes,
+            query=query,
+            all_tags=all_tags,
+            active_tag=active_tag,
+            rating_stats=_rating_stats([r.id for r in recipes]),
+            sort=sort,
+            sort_options=SORT_OPTIONS,
+            max_time=max_time,
+            time_filters=TIME_FILTERS,
+            difficulty=difficulty,
+            difficulties=DIFFICULTIES,
+            ingredients_query=ingredients_query,
+            matches=matches,
         )
 
     @app.route("/przepis/<slug>")
@@ -300,7 +495,332 @@ def create_app(config_class=None):
             is_admin_viewer = current_user.is_authenticated and current_user.is_admin
             if not (is_owner or is_admin_viewer):
                 abort(404)
-        return render_template("recipe_detail.html", recipe=recipe)
+        if recipe.is_published:
+            _count_view("recipe", recipe.id)
+        avg, count = _rating_stats([recipe.id]).get(recipe.id, (None, 0))
+        similar, similar_by_tags = _similar_recipes(recipe)
+        my_rating = None
+        voter_hash = _voter_hash_from_cookie()
+        if voter_hash:
+            my_rating = RecipeRating.query.filter_by(recipe_id=recipe.id, voter_hash=voter_hash).first()
+        return render_template(
+            "recipe_detail.html",
+            recipe=recipe,
+            rating_avg=avg,
+            rating_count=count,
+            my_rating=my_rating.score if my_rating else None,
+            recipe_jsonld=_recipe_jsonld(recipe, avg, count) if recipe.is_published else None,
+            comments=_published_comments(Comment.recipe_id == recipe.id),
+            similar=similar,
+            similar_by_tags=similar_by_tags,
+            similar_stats=_rating_stats([r.id for r in similar]),
+            **_comment_form_context(),
+        )
+
+    def _similar_recipes(recipe, limit=4):
+        """Przepisy z największą liczbą wspólnych tagów. Gdy żaden nie ma wspólnego tagu —
+        po prostu najnowsze (wtedy sekcja nazywa się „Inne przepisy"). Zwraca (lista, czy_po_tagach)."""
+        base = Recipe.query.filter(Recipe.status == "published", Recipe.id != recipe.id)
+        tag_ids = [t.id for t in recipe.tags]
+        if tag_ids:
+            shared = func.count(recipe_tags.c.tag_id)
+            rows = (
+                base.join(recipe_tags, recipe_tags.c.recipe_id == Recipe.id)
+                .filter(recipe_tags.c.tag_id.in_(tag_ids))
+                .group_by(Recipe.id)
+                .order_by(shared.desc(), Recipe.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            if rows:
+                return rows, True
+        return base.order_by(Recipe.created_at.desc()).limit(limit).all(), False
+
+    # ---------- własne statystyki wyświetleń (bez zewnętrznej analityki i ciasteczek) ----------
+    _BOT_UA_RE = re.compile(r"bot|crawl|spider|slurp|preview|monitor|curl|wget|python-requests|headless", re.I)
+
+    def _count_view(kind, object_id):
+        """+1 do dzisiejszego licznika strony. Pomija zalogowanych (redakcja) i boty.
+        Błąd licznika nigdy nie może zepsuć wyświetlenia przepisu."""
+        if current_user.is_authenticated or _BOT_UA_RE.search(request.user_agent.string or ""):
+            return
+        # Prefetch/prerender przeglądarki to nie jest prawdziwe wyświetlenie.
+        if request.headers.get("Purpose") == "prefetch" or request.headers.get("Sec-Purpose", "").startswith("prefetch"):
+            return
+        today = date.today()
+        try:
+            result = db.session.execute(
+                update(DailyView)
+                .where(DailyView.kind == kind, DailyView.object_id == object_id, DailyView.day == today)
+                .values(views=DailyView.views + 1)
+            )
+            if result.rowcount == 0:
+                db.session.add(DailyView(kind=kind, object_id=object_id, day=today, views=1))
+            db.session.commit()
+        except IntegrityError:
+            # Równoległe pierwsze wyświetlenie dnia — wiersz już istnieje, więc tylko zwiększamy.
+            db.session.rollback()
+            db.session.execute(
+                update(DailyView)
+                .where(DailyView.kind == kind, DailyView.object_id == object_id, DailyView.day == today)
+                .values(views=DailyView.views + 1)
+            )
+            db.session.commit()
+        except Exception:  # noqa: BLE001
+            db.session.rollback()
+            app.logger.exception("Nie udało się zapisać wyświetlenia")
+
+    # ---------- dane strukturalne dla wyszukiwarek (schema.org/Recipe jako JSON-LD) ----------
+    def _recipe_jsonld(recipe, rating_avg, rating_count):
+        """Opis przepisu w formacie rozumianym przez Google (karta z gwiazdkami, czasem, kcal)."""
+        def ingredient_text(item):
+            return " ".join(p for p in (item["amount"], item["unit"], item["name"]) if p)
+
+        data = {
+            "@context": "https://schema.org",
+            "@type": "Recipe",
+            "name": recipe.title,
+            "url": url_for("recipe_detail", slug=recipe.slug, _external=True),
+            "recipeIngredient": [ingredient_text(i) for i in recipe.ingredients_list],
+            "recipeInstructions": [
+                {"@type": "HowToStep", "position": n, "text": step}
+                for n, step in enumerate(recipe.instructions_list, start=1)
+            ],
+        }
+        if recipe.description:
+            data["description"] = recipe.description
+        if recipe.image_url:
+            data["image"] = [request.host_url.rstrip("/") + recipe.image_url]
+        if recipe.author:
+            data["author"] = {"@type": "Person", "name": recipe.author.username}
+        if recipe.created_at:
+            data["datePublished"] = recipe.created_at.date().isoformat()
+        if recipe.servings:
+            data["recipeYield"] = f"{recipe.servings} porcji"
+        if recipe.prep_time_min:
+            data["totalTime"] = f"PT{recipe.prep_time_min}M"
+        if recipe.tags:
+            data["keywords"] = ", ".join(t.name for t in recipe.tags)
+            data["recipeCategory"] = recipe.tags[0].name
+        per_serving = recipe.nutrition_per_serving
+        if per_serving:
+            data["nutrition"] = {
+                "@type": "NutritionInformation",
+                "calories": f"{round(per_serving['kcal'])} kcal",
+                "proteinContent": f"{per_serving['protein']:.1f} g",
+                "fatContent": f"{per_serving['fat']:.1f} g",
+                "carbohydrateContent": f"{per_serving['carbs']:.1f} g",
+            }
+        if rating_count:
+            data["aggregateRating"] = {
+                "@type": "AggregateRating",
+                "ratingValue": rating_avg,
+                "ratingCount": rating_count,
+                "bestRating": 5,
+                "worstRating": 1,
+            }
+        return data
+
+    # ---------- komentarze i oceny czytelników ----------
+    VOTER_COOKIE = "voter_id"
+    VOTER_COOKIE_MAX_AGE = 2 * 365 * 24 * 3600
+    # Formularz wysłany szybciej niż w tyle sekund od wyświetlenia strony to niemal na pewno bot.
+    COMMENT_MIN_SECONDS = 3
+    COMMENT_THANKS = "Dziękujemy! Komentarz pojawi się po zatwierdzeniu przez moderatora."
+
+    def _hmac_hex(value: str) -> str:
+        """HMAC-SHA256 z SECRET_KEY — pozwala porównywać identyfikatory bez przechowywania ich wprost."""
+        return hmac.new(app.config["SECRET_KEY"].encode(), value.encode(), hashlib.sha256).hexdigest()
+
+    def _voter_hash_from_cookie():
+        token = request.cookies.get(VOTER_COOKIE, "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{20,64}", token):
+            return None
+        return _hmac_hex("voter:" + token)
+
+    def _rating_stats(recipe_ids):
+        """Zwraca {recipe_id: (średnia, liczba ocen)} jednym zapytaniem."""
+        if not recipe_ids:
+            return {}
+        rows = (
+            db.session.query(RecipeRating.recipe_id, func.avg(RecipeRating.score), func.count(RecipeRating.id))
+            .filter(RecipeRating.recipe_id.in_(recipe_ids))
+            .group_by(RecipeRating.recipe_id)
+            .all()
+        )
+        return {rid: (round(float(avg), 1), cnt) for rid, avg, cnt in rows}
+
+    def _published_comments(target_filter):
+        return (
+            Comment.query.filter(target_filter, Comment.status == "published")
+            .order_by(Comment.created_at.asc())
+            .all()
+        )
+
+    def _comment_form_context():
+        return {
+            "comment_form_ts": int(time.time()),
+            "comment_name_max": COMMENT_NAME_MAX,
+            "comment_content_max": COMMENT_CONTENT_MAX,
+        }
+
+    def _handle_comment_post(target_kwargs, redirect_url):
+        """Wspólna obsługa formularza komentarza pod przepisem i wpisem na blogu."""
+        redirect_url += "#komentarze"
+        # Pułapka na boty: pole niewidoczne dla ludzi oraz zbyt szybkie wysłanie formularza.
+        # Botowi udajemy sukces, żeby nie wiedział, że został odrzucony.
+        try:
+            elapsed = time.time() - int(request.form.get("form_ts", "0"))
+        except ValueError:
+            elapsed = 0
+        if request.form.get("website") or elapsed < COMMENT_MIN_SECONDS:
+            flash(COMMENT_THANKS, "success")
+            return redirect(redirect_url)
+
+        name = " ".join(request.form.get("author_name", "").split())
+        content = request.form.get("content", "").strip()
+        if not name or not content:
+            flash("Podaj podpis i treść komentarza.", "error")
+            return redirect(redirect_url)
+        if len(name) > COMMENT_NAME_MAX or len(content) > COMMENT_CONTENT_MAX:
+            flash(
+                f"Komentarz jest za długi (podpis do {COMMENT_NAME_MAX}, treść do {COMMENT_CONTENT_MAX} znaków).",
+                "error",
+            )
+            return redirect(redirect_url)
+
+        db.session.add(
+            Comment(
+                author_name=name,
+                content=content,
+                status="pending",
+                voter_hash=_hmac_hex("ip:" + (get_remote_address() or "")),
+                **target_kwargs,
+            )
+        )
+        db.session.commit()
+        flash(COMMENT_THANKS, "success")
+        return redirect(redirect_url)
+
+    @app.route("/przepis/<slug>/komentarz", methods=["POST"])
+    @limiter.limit(lambda: app.config["COMMENT_RATE_LIMIT"])
+    def recipe_comment(slug):
+        recipe = Recipe.query.filter_by(slug=slug, status="published").first_or_404()
+        return _handle_comment_post({"recipe_id": recipe.id}, url_for("recipe_detail", slug=slug))
+
+    @app.route("/przepis/<slug>/ocena", methods=["POST"])
+    @limiter.limit(lambda: app.config["RATING_RATE_LIMIT"])
+    def recipe_rate(slug):
+        recipe = Recipe.query.filter_by(slug=slug, status="published").first_or_404()
+        redirect_url = url_for("recipe_detail", slug=slug) + "#ocena"
+        try:
+            score = int(request.form.get("score", ""))
+        except ValueError:
+            score = 0
+        if not 1 <= score <= 5:
+            flash("Wybierz ocenę od 1 do 5 gwiazdek.", "error")
+            return redirect(redirect_url)
+
+        token = request.cookies.get(VOTER_COOKIE, "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{20,64}", token):
+            token = secrets.token_urlsafe(24)
+        voter_hash = _hmac_hex("voter:" + token)
+
+        rating = RecipeRating.query.filter_by(recipe_id=recipe.id, voter_hash=voter_hash).first()
+        if rating:
+            rating.score = score
+            flash("Zmieniono Twoją ocenę przepisu.", "success")
+        else:
+            db.session.add(RecipeRating(recipe_id=recipe.id, score=score, voter_hash=voter_hash))
+            flash("Dziękujemy za ocenę!", "success")
+        db.session.commit()
+
+        response = redirect(redirect_url)
+        response.set_cookie(
+            VOTER_COOKIE,
+            token,
+            max_age=VOTER_COOKIE_MAX_AGE,
+            httponly=True,
+            samesite="Lax",
+            secure=app.config.get("SESSION_COOKIE_SECURE", False),
+        )
+        return response
+
+    # ---------- PWA: manifest, service worker, strona offline ----------
+    @app.route("/manifest.webmanifest")
+    def web_manifest():
+        manifest = {
+            "name": "Szczypta Smaku — przepisy i blog kulinarny",
+            "short_name": "Szczypta Smaku",
+            "description": "Przepisy kulinarne z listą zakupów, minutnikami i dostępem offline.",
+            "lang": "pl",
+            "start_url": "/?source=pwa",
+            "scope": "/",
+            "display": "standalone",
+            "background_color": "#f8f1e8",
+            "theme_color": "#a3461f",
+            "icons": [
+                {"src": url_for("static", filename="icons/icon-192.png"), "sizes": "192x192", "type": "image/png"},
+                {"src": url_for("static", filename="icons/icon-512.png"), "sizes": "512x512", "type": "image/png"},
+                {
+                    "src": url_for("static", filename="icons/maskable-512.png"),
+                    "sizes": "512x512",
+                    "type": "image/png",
+                    "purpose": "maskable",
+                },
+            ],
+            "shortcuts": [
+                {"name": "Lista zakupów", "url": url_for("shopping_list")},
+                {"name": "Ulubione", "url": url_for("favorites")},
+            ],
+        }
+        response = app.response_class(json.dumps(manifest, ensure_ascii=False), mimetype="application/manifest+json")
+        response.headers["Cache-Control"] = "public, max-age=86400"
+        return response
+
+    @app.route("/sw.js")
+    def service_worker():
+        # Service worker musi być serwowany z katalogu głównego, żeby obejmował całą witrynę.
+        response = send_file(os.path.join(app.static_folder, "js", "sw.js"), mimetype="text/javascript")
+        # Przeglądarka ma zawsze sprawdzać nową wersję (aktualizacje aplikacji).
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+    @app.route("/offline")
+    def offline_page():
+        return render_template("offline.html")
+
+    # ---------- lista zakupów i ulubione (dane w localStorage przeglądarki) ----------
+    @app.route("/lista-zakupow")
+    def shopping_list():
+        return render_template("shopping_list.html")
+
+    @app.route("/ulubione")
+    def favorites():
+        return render_template("favorites.html")
+
+    @app.route("/api/przepisy")
+    def api_recipes_by_slug():
+        """Dane kart przepisów dla strony ulubionych: ?slugi=a,b,c (tylko opublikowane, max 100)."""
+        slugs = [s.strip() for s in request.args.get("slugi", "").split(",") if s.strip()][:100]
+        if not slugs:
+            return jsonify(recipes=[])
+        recipes = Recipe.query.filter(Recipe.slug.in_(slugs), Recipe.status == "published").all()
+        stats = _rating_stats([r.id for r in recipes])
+        return jsonify(
+            recipes=[
+                {
+                    "slug": r.slug,
+                    "title": r.title,
+                    "description": r.description or "",
+                    "url": url_for("recipe_detail", slug=r.slug),
+                    "image_url": r.image_url or "",
+                    "prep_time": r.prep_time_display,
+                    "rating": stats.get(r.id, (None, 0))[0],
+                }
+                for r in recipes
+            ]
+        )
 
     # ---------- logowanie ----------
     def _post_login_redirect_endpoint():
@@ -468,11 +988,13 @@ def create_app(config_class=None):
         recipes.sort(key=lambda r: status_priority.get(r.status, 3))
         pending_count = sum(1 for r in recipes if r.status == "pending")
         blog_pending_count = BlogPost.query.filter_by(status="pending").count()
+        comments_pending_count = Comment.query.filter_by(status="pending").count()
         return render_template(
             "admin/dashboard.html",
             recipes=recipes,
             pending_count=pending_count,
             blog_pending_count=blog_pending_count,
+            comments_pending_count=comments_pending_count,
         )
 
     @app.route("/admin/przepis/nowy", methods=["GET", "POST"])
@@ -492,6 +1014,7 @@ def create_app(config_class=None):
             units=INGREDIENT_UNITS,
             pan_shapes=PAN_SHAPES,
             all_tags=Tag.query.order_by(Tag.name).all(),
+            difficulties=DIFFICULTIES,
             form_action=url_for("recipe_create"),
             cancel_url=url_for("admin_dashboard"),
             editor_mode=False,
@@ -516,6 +1039,7 @@ def create_app(config_class=None):
             units=INGREDIENT_UNITS,
             pan_shapes=PAN_SHAPES,
             all_tags=Tag.query.order_by(Tag.name).all(),
+            difficulties=DIFFICULTIES,
             form_action=url_for("recipe_edit", recipe_id=recipe.id),
             cancel_url=url_for("admin_dashboard"),
             editor_mode=False,
@@ -666,6 +1190,7 @@ def create_app(config_class=None):
             units=INGREDIENT_UNITS,
             pan_shapes=PAN_SHAPES,
             all_tags=Tag.query.order_by(Tag.name).all(),
+            difficulties=DIFFICULTIES,
             form_action=url_for("redaktor_recipe_create"),
             cancel_url=url_for("redaktor_dashboard"),
             editor_mode=True,
@@ -693,6 +1218,7 @@ def create_app(config_class=None):
             units=INGREDIENT_UNITS,
             pan_shapes=PAN_SHAPES,
             all_tags=Tag.query.order_by(Tag.name).all(),
+            difficulties=DIFFICULTIES,
             form_action=url_for("redaktor_recipe_edit", recipe_id=recipe.id),
             cancel_url=url_for("redaktor_dashboard"),
             editor_mode=True,
@@ -732,7 +1258,126 @@ def create_app(config_class=None):
             is_admin_viewer = current_user.is_authenticated and current_user.is_admin
             if not (is_owner or is_admin_viewer):
                 abort(404)
-        return render_template("blog/detail.html", post=post)
+        if post.is_published:
+            _count_view("blog", post.id)
+        return render_template(
+            "blog/detail.html",
+            post=post,
+            comments=_published_comments(Comment.blog_post_id == post.id),
+            **_comment_form_context(),
+        )
+
+    @app.route("/blog/<slug>/komentarz", methods=["POST"])
+    @limiter.limit(lambda: app.config["COMMENT_RATE_LIMIT"])
+    def blog_comment(slug):
+        post = BlogPost.query.filter_by(slug=slug, status="published").first_or_404()
+        return _handle_comment_post({"blog_post_id": post.id}, url_for("blog_detail", slug=slug))
+
+    # ---------- statystyki (administrator) ----------
+    STATS_PERIODS = {7: "7 dni", 30: "30 dni", 90: "90 dni"}
+
+    @app.route("/admin/statystyki")
+    @login_required
+    @admin_required
+    def admin_stats():
+        days = request.args.get("dni", 30, type=int)
+        if days not in STATS_PERIODS:
+            days = 30
+        today = date.today()
+        since = today - timedelta(days=days - 1)
+
+        # Wyświetlenia dzień po dniu (z zerami dla dni bez wizyt — inaczej wykres by „skakał").
+        per_day = dict(
+            db.session.query(DailyView.day, func.sum(DailyView.views))
+            .filter(DailyView.day >= since)
+            .group_by(DailyView.day)
+            .all()
+        )
+        daily = []
+        for offset in range(days):
+            day = since + timedelta(days=offset)
+            daily.append({"day": day, "views": int(per_day.get(day, 0) or 0)})
+        total_views = sum(d["views"] for d in daily)
+        max_views = max((d["views"] for d in daily), default=0)
+
+        def top_viewed(kind, model, limit=10):
+            rows = (
+                db.session.query(DailyView.object_id, func.sum(DailyView.views).label("views"))
+                .filter(DailyView.kind == kind, DailyView.day >= since)
+                .group_by(DailyView.object_id)
+                .order_by(func.sum(DailyView.views).desc())
+                .limit(limit)
+                .all()
+            )
+            objects = {o.id: o for o in model.query.filter(model.id.in_([r[0] for r in rows])).all()}
+            return [(objects[oid], int(v)) for oid, v in rows if oid in objects]
+
+        top_recipes = top_viewed("recipe", Recipe)
+        top_posts = top_viewed("blog", BlogPost)
+
+        # Najlepiej oceniane (min. 1 głos) i aktywność czytelników w wybranym okresie.
+        rating_rows = (
+            db.session.query(
+                RecipeRating.recipe_id, func.avg(RecipeRating.score), func.count(RecipeRating.id)
+            )
+            .group_by(RecipeRating.recipe_id)
+            .order_by(func.avg(RecipeRating.score).desc(), func.count(RecipeRating.id).desc())
+            .limit(10)
+            .all()
+        )
+        rated = {r.id: r for r in Recipe.query.filter(Recipe.id.in_([r[0] for r in rating_rows])).all()}
+        top_rated = [(rated[rid], round(float(avg), 1), cnt) for rid, avg, cnt in rating_rows if rid in rated]
+
+        since_dt = datetime.combine(since, datetime.min.time())
+        summary = {
+            "views": total_views,
+            "ratings": RecipeRating.query.filter(RecipeRating.updated_at >= since_dt).count(),
+            "comments": Comment.query.filter(Comment.created_at >= since_dt).count(),
+            "comments_pending": Comment.query.filter_by(status="pending").count(),
+        }
+        return render_template(
+            "admin/stats.html",
+            days=days,
+            periods=STATS_PERIODS,
+            daily=daily,
+            max_views=max_views,
+            summary=summary,
+            top_recipes=top_recipes,
+            top_posts=top_posts,
+            top_rated=top_rated,
+        )
+
+    # ---------- moderacja komentarzy (administrator) ----------
+    @app.route("/admin/komentarze")
+    @login_required
+    @admin_required
+    def admin_comments():
+        pending = Comment.query.filter_by(status="pending").order_by(Comment.created_at.asc()).all()
+        recent = (
+            Comment.query.filter_by(status="published").order_by(Comment.created_at.desc()).limit(50).all()
+        )
+        return render_template("admin/comments.html", pending=pending, recent=recent)
+
+    @app.route("/admin/komentarz/<int:comment_id>/zatwierdz", methods=["POST"])
+    @login_required
+    @admin_required
+    def comment_approve(comment_id):
+        comment = db.session.get(Comment, comment_id) or abort(404)
+        comment.status = "published"
+        db.session.commit()
+        flash("Komentarz został opublikowany.", "success")
+        return redirect(url_for("admin_comments"))
+
+    @app.route("/admin/komentarz/<int:comment_id>/usun", methods=["POST"])
+    @login_required
+    @admin_required
+    def comment_delete(comment_id):
+        comment = db.session.get(Comment, comment_id) or abort(404)
+        db.session.delete(comment)
+        db.session.commit()
+        flash("Komentarz został usunięty.", "success")
+        next_url = request.form.get("next")
+        return redirect(next_url if is_safe_redirect_target(next_url) else url_for("admin_comments"))
 
     # ---------- blog: panel administratora ----------
     @app.route("/admin/blog")
@@ -944,6 +1589,9 @@ def create_app(config_class=None):
             "admin/backup.html",
             recipe_count=Recipe.query.count(),
             tag_count=Tag.query.count(),
+            blog_post_count=BlogPost.query.count(),
+            comment_count=Comment.query.count(),
+            rating_count=RecipeRating.query.count(),
         )
 
     @app.route("/admin/kopia-zapasowa/eksport")
@@ -995,6 +1643,10 @@ def create_app(config_class=None):
                     db.session.execute(recipe_tags.delete())
                     Recipe.query.delete()
                     Tag.query.delete()
+                    # Wpisy na blogu też są częścią kopii (od wersji 2 formatu). Komentarze do
+                    # przepisów i wpisów usuwa baza (ON DELETE CASCADE).
+                    if isinstance(manifest.get("blog_posts"), list):
+                        BlogPost.query.delete()
 
                 image_name_map = _extract_backup_images(zf)
 
@@ -1009,6 +1661,21 @@ def create_app(config_class=None):
                     else:
                         updated += 1
 
+                posts_created = posts_updated = posts_skipped = 0
+                blog_posts = manifest.get("blog_posts")
+                for entry in blog_posts if isinstance(blog_posts, list) else []:
+                    post, action = (
+                        _restore_blog_post_from_backup(entry, mode, image_name_map)
+                        if isinstance(entry, dict) else (None, "nieprawidłowa pozycja")
+                    )
+                    if post is None:
+                        posts_skipped += 1
+                    elif action == "utworzono":
+                        posts_created += 1
+                    else:
+                        posts_updated += 1
+
+                reader_stats = _restore_reader_data(manifest, mode)
                 db.session.commit()
 
             app.logger.info(
@@ -1018,6 +1685,19 @@ def create_app(config_class=None):
             summary = f"Import zakończony: utworzono {created}, zaktualizowano {updated} przepisów."
             if skipped:
                 summary += f" Pominięto {len(skipped)} pozycji."
+            if isinstance(manifest.get("blog_posts"), list):
+                summary += f" Wpisy na blogu: utworzono {posts_created}, zaktualizowano {posts_updated}."
+                if posts_skipped:
+                    summary += f" Pominięto {posts_skipped} wpisów."
+            summary += (
+                f" Komentarze: dodano {reader_stats['comments']}."
+                f" Oceny: dodano {reader_stats['ratings_new']}, zmieniono {reader_stats['ratings_updated']}."
+            )
+            if reader_stats["skipped"]:
+                summary += (
+                    f" Pominięto {reader_stats['skipped']} komentarzy/ocen"
+                    " (np. dotyczących wpisów na blogu, których nie ma w tej bazie)."
+                )
             flash(summary, "success")
         except (zipfile.BadZipFile, KeyError, json.JSONDecodeError, UnicodeDecodeError) as exc:
             db.session.rollback()
@@ -1102,6 +1782,18 @@ def create_app(config_class=None):
         buffer = io.BytesIO()
         added_images = set()
 
+        def add_image(filename):
+            """Dołącza zdjęcie z katalogu uploadów do archiwum (raz). Zwraca nazwę albo None."""
+            if not filename or "/" in filename or "\\" in filename or filename.startswith("."):
+                return None
+            image_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+            if not os.path.isfile(image_path):
+                return None
+            if filename not in added_images:
+                zf.write(image_path, arcname=f"images/{filename}")
+                added_images.add(filename)
+            return filename
+
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             recipes_data = []
             for recipe in Recipe.query.order_by(Recipe.id).all():
@@ -1128,6 +1820,8 @@ def create_app(config_class=None):
                         "ingredients_sections": recipe.ingredients_sections,
                         "instructions": recipe.instructions_list,
                         "servings": recipe.servings,
+                        "prep_time_min": recipe.prep_time_min,
+                        "difficulty": recipe.difficulty,
                         "pan_shape": recipe.pan_shape,
                         "pan_size_cm": recipe.pan_size_cm,
                         "pan_width_cm": recipe.pan_width_cm,
@@ -1142,17 +1836,212 @@ def create_app(config_class=None):
                     }
                 )
 
+            blog_posts_data = []
+            for post in BlogPost.query.order_by(BlogPost.id).all():
+                image_filename = add_image(post.image_url.rsplit("/", 1)[-1]) if post.image_url else None
+                # Zdjęcia wstawione w treść wpisu (Markdown: ![opis](/static/uploads/plik.jpg)).
+                content_images = [
+                    name for name in dict.fromkeys(BLOG_UPLOAD_REF_RE.findall(post.content or "")) if add_image(name)
+                ]
+                blog_posts_data.append(
+                    {
+                        "title": post.title,
+                        "slug": post.slug,
+                        "excerpt": post.excerpt,
+                        "content": post.content,
+                        "image_filename": image_filename,
+                        "content_images": content_images,
+                        "status": post.status,
+                        "rejection_reason": post.rejection_reason,
+                        "author_username": post.author.username if post.author else None,
+                        "created_at": post.created_at.isoformat() if post.created_at else None,
+                        "updated_at": post.updated_at.isoformat() if post.updated_at else None,
+                        "published_at": post.published_at.isoformat() if post.published_at else None,
+                    }
+                )
+
+            comments_data, ratings_data = _export_reader_data()
             manifest = {
                 "app": "wielka-ksiega-przepisow",
-                "format_version": 1,
+                # 2 = dodane wpisy na blogu, komentarze i oceny (import nadal przyjmuje wersję 1).
+                "format_version": 2,
                 "exported_at": datetime.utcnow().isoformat() + "Z",
                 "recipe_count": len(recipes_data),
                 "recipes": recipes_data,
+                "blog_post_count": len(blog_posts_data),
+                "blog_posts": blog_posts_data,
+                "comment_count": len(comments_data),
+                "comments": comments_data,
+                "rating_count": len(ratings_data),
+                "ratings": ratings_data,
             }
             zf.writestr("recipes.json", json.dumps(manifest, ensure_ascii=False, indent=2))
 
         buffer.seek(0)
         return buffer
+
+    # ---------- kopia zapasowa: wpisy na blogu ----------
+    def _restore_blog_post_from_backup(data: dict, mode: str, image_name_map: dict):
+        """Tworzy albo aktualizuje (po slugu) wpis na blogu z kopii. Zwraca (wpis_lub_None, akcja)."""
+        title = str(data.get("title") or "").strip()[:150]
+        slug = (str(data.get("slug") or "").strip() or slugify(title))[:180]
+        content = str(data.get("content") or "")
+        if not slug or not title or not content.strip():
+            return None, "pominięto wpis bez tytułu lub treści"
+
+        post = BlogPost.query.filter_by(slug=slug).first()
+        if post is None:
+            author = User.query.filter_by(username=str(data.get("author_username") or "")).first()
+            post = BlogPost(slug=slug, author_id=author.id if author else current_user.id)
+            post.created_at = _parse_backup_datetime(data.get("created_at")) or datetime.utcnow()
+            db.session.add(post)
+            action = "utworzono"
+        elif mode == "skip_existing":
+            return None, f"pominięto (już istnieje): „{title}”"
+        else:
+            action = "zaktualizowano"
+
+        # Zdjęcia z archiwum dostały nowe nazwy — podmieniamy odwołania w treści.
+        def remap(match):
+            new_name = image_name_map.get(match.group(1))
+            return f"{BLOG_IMAGE_PREFIX}{new_name}" if new_name else match.group(0)
+
+        post.title = title
+        post.content = BLOG_UPLOAD_REF_RE.sub(remap, content)
+        post.excerpt = str(data.get("excerpt") or "").strip()[:300] or None
+
+        original_image = data.get("image_filename")
+        if original_image and original_image in image_name_map:
+            post.image_url = url_for("static", filename=f"uploads/{image_name_map[original_image]}")
+
+        status = data.get("status")
+        post.status = status if status in RECIPE_STATUSES else "pending"
+        post.rejection_reason = str(data.get("rejection_reason") or "").strip() or None
+        post.published_at = _parse_backup_datetime(data.get("published_at"))
+        if post.status == "published" and post.published_at is None:
+            post.published_at = datetime.utcnow()
+        return post, action
+
+    # ---------- kopia zapasowa: komentarze i oceny czytelników ----------
+    def _export_reader_data():
+        """Komentarze (pod przepisami i wpisami) oraz oceny — powiązane z treścią po slugu,
+        bo identyfikatory w bazie docelowej mogą być inne."""
+        comments = []
+        for c in Comment.query.order_by(Comment.id).all():
+            if c.recipe is not None:
+                target_type, target_slug = "recipe", c.recipe.slug
+            elif c.blog_post is not None:
+                target_type, target_slug = "blog", c.blog_post.slug
+            else:
+                continue
+            comments.append(
+                {
+                    "target_type": target_type,
+                    "target_slug": target_slug,
+                    "author_name": c.author_name,
+                    "content": c.content,
+                    "status": c.status,
+                    "voter_hash": c.voter_hash,
+                    "created_at": c.created_at.isoformat() if c.created_at else None,
+                }
+            )
+        ratings = [
+            {
+                "recipe_slug": r.recipe.slug,
+                "score": r.score,
+                # HMAC z SECRET_KEY — nie da się z niego odczytać IP ani ciasteczka. Po imporcie
+                # na serwer z innym SECRET_KEY czytelnik zagłosuje po prostu „od nowa".
+                "voter_hash": r.voter_hash,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            }
+            for r in RecipeRating.query.order_by(RecipeRating.id).all()
+            if r.recipe is not None
+        ]
+        return comments, ratings
+
+    def _parse_backup_datetime(value):
+        try:
+            return datetime.fromisoformat(str(value).rstrip("Z")) if value else None
+        except ValueError:
+            return None
+
+    def _restore_reader_data(manifest: dict, mode: str):
+        """Przywraca komentarze i oceny z kopii. Komentarze nigdy się nie dublują (ten sam
+        cel + podpis + treść = ten sam komentarz). Oceny: jedna na (przepis, głosujący) —
+        w trybie „Dodaj tylko nowe" istniejąca ocena zostaje, w pozostałych jest nadpisywana.
+        Zwraca słownik z licznikami."""
+        stats = {"comments": 0, "ratings_new": 0, "ratings_updated": 0, "skipped": 0}
+        db.session.flush()  # przepisy utworzone w tym imporcie muszą mieć już id
+        recipe_ids = dict(db.session.query(Recipe.slug, Recipe.id).all())
+        post_ids = dict(db.session.query(BlogPost.slug, BlogPost.id).all())
+
+        existing_comments = {
+            (c.recipe_id, c.blog_post_id, c.author_name, c.content)
+            for c in db.session.query(Comment.recipe_id, Comment.blog_post_id, Comment.author_name, Comment.content)
+        }
+        hash_re = re.compile(r"[0-9a-f]{64}")
+
+        for item in manifest.get("comments") or []:
+            if not isinstance(item, dict):
+                stats["skipped"] += 1
+                continue
+            slug = str(item.get("target_slug") or "")
+            recipe_id = recipe_ids.get(slug) if item.get("target_type") == "recipe" else None
+            post_id = post_ids.get(slug) if item.get("target_type") == "blog" else None
+            name = " ".join(str(item.get("author_name") or "").split())[:COMMENT_NAME_MAX]
+            content = str(item.get("content") or "").strip()[:COMMENT_CONTENT_MAX]
+            if not (recipe_id or post_id) or not name or not content:
+                stats["skipped"] += 1  # np. komentarz do wpisu na blogu, którego nie ma w tej bazie
+                continue
+            key = (recipe_id, post_id, name, content)
+            if key in existing_comments:
+                continue
+            voter_hash = str(item.get("voter_hash") or "")
+            db.session.add(
+                Comment(
+                    recipe_id=recipe_id,
+                    blog_post_id=post_id,
+                    author_name=name,
+                    content=content,
+                    status=item.get("status") if item.get("status") in COMMENT_STATUSES else "pending",
+                    voter_hash=voter_hash if hash_re.fullmatch(voter_hash) else None,
+                    created_at=_parse_backup_datetime(item.get("created_at")) or datetime.utcnow(),
+                )
+            )
+            existing_comments.add(key)
+            stats["comments"] += 1
+
+        existing_ratings = {(r.recipe_id, r.voter_hash): r for r in RecipeRating.query.all()}
+        for item in manifest.get("ratings") or []:
+            if not isinstance(item, dict):
+                stats["skipped"] += 1
+                continue
+            recipe_id = recipe_ids.get(str(item.get("recipe_slug") or ""))
+            score = item.get("score")
+            if not recipe_id or not isinstance(score, int) or not 1 <= score <= 5:
+                stats["skipped"] += 1
+                continue
+            voter_hash = str(item.get("voter_hash") or "")
+            if not hash_re.fullmatch(voter_hash):
+                voter_hash = secrets.token_hex(32)  # głos bez identyfikatora — zachowujemy jako osobny
+            rating = existing_ratings.get((recipe_id, voter_hash))
+            if rating is not None:
+                if mode != "skip_existing" and rating.score != score:
+                    rating.score = score
+                    stats["ratings_updated"] += 1
+                continue
+            rating = RecipeRating(
+                recipe_id=recipe_id,
+                score=score,
+                voter_hash=voter_hash,
+                created_at=_parse_backup_datetime(item.get("created_at")) or datetime.utcnow(),
+                updated_at=_parse_backup_datetime(item.get("updated_at")) or datetime.utcnow(),
+            )
+            db.session.add(rating)
+            existing_ratings[(recipe_id, voter_hash)] = rating
+            stats["ratings_new"] += 1
+        return stats
 
     # ---------- kopia zapasowa: rozpakowywanie zdjęć z importu ----------
     def _extract_backup_images(zf: zipfile.ZipFile) -> dict:
@@ -1229,6 +2118,12 @@ def create_app(config_class=None):
 
             servings = data.get("servings")
             recipe.servings = int(servings) if isinstance(servings, (int, float)) else None
+            prep_time = data.get("prep_time_min")
+            recipe.prep_time_min = (
+                int(prep_time) if isinstance(prep_time, (int, float)) and 0 < prep_time <= 10080 else None
+            )
+            difficulty = data.get("difficulty")
+            recipe.difficulty = difficulty if difficulty in DIFFICULTIES else None
 
             pan_shape = data.get("pan_shape")
             recipe.pan_shape = pan_shape if pan_shape in PAN_SHAPES else None
@@ -1404,6 +2299,11 @@ def create_app(config_class=None):
 
         servings = request.form.get("servings", "").strip()
         recipe.servings = int(servings) if servings.isdigit() else None
+
+        prep_time = request.form.get("prep_time_min", "").strip()
+        recipe.prep_time_min = int(prep_time) if prep_time.isdigit() and 0 < int(prep_time) <= 10080 else None
+        difficulty = request.form.get("difficulty", "").strip()
+        recipe.difficulty = difficulty if difficulty in DIFFICULTIES else None
 
     # ---------- obsługa błędów ----------
     @app.errorhandler(403)

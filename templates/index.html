@@ -1,54 +1,89 @@
 {% extends "base.html" %}
+{% from "_recipe_card.html" import recipe_card %}
 {% block title %}Wszystkie przepisy – Szczypta Smaku{% endblock %}
 
 {% block content %}
   <h1>Przepisy</h1>
 
   <form class="search-form" method="get" action="{{ url_for('index') }}">
-    <input type="text" name="q" placeholder="Szukaj przepisu…" value="{{ query }}">
+    <input type="text" name="q" placeholder="Szukaj przepisu…" value="{{ query }}" aria-label="Szukaj po nazwie">
     {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag.slug }}">{% endif %}
     <button type="submit">Szukaj</button>
+
+    <details class="filters" {{ 'open' if ingredients_query or max_time or difficulty or sort != 'nowe' else '' }}>
+      <summary>Filtry i sortowanie</summary>
+      <div class="filters-grid">
+        <div class="filters-ingredients">
+          <label for="skladniki">🥚 Co masz w lodówce?</label>
+          <input type="text" id="skladniki" name="skladniki" value="{{ ingredients_query }}"
+                 placeholder="np. jajka, mąka, mleko">
+        </div>
+        <div>
+          <label for="sort">Sortuj</label>
+          <select id="sort" name="sort">
+            {% for key, label in sort_options.items() %}
+              <option value="{{ key }}" {{ 'selected' if sort == key else '' }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="czas">Czas przygotowania</label>
+          <select id="czas" name="czas">
+            <option value="">dowolny</option>
+            {% for minutes, label in time_filters.items() %}
+              <option value="{{ minutes }}" {{ 'selected' if max_time == minutes else '' }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label for="trudnosc">Trudność</label>
+          <select id="trudnosc" name="trudnosc">
+            <option value="">dowolna</option>
+            {% for key, label in difficulties.items() %}
+              <option value="{{ key }}" {{ 'selected' if difficulty == key else '' }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="filters-actions">
+        <button type="submit" class="btn btn-small">Zastosuj</button>
+        <a class="btn btn-small btn-secondary" href="{{ url_for('index') }}">Wyczyść</a>
+      </div>
+    </details>
   </form>
 
   {% if all_tags %}
+    {# Linki tagów zachowują pozostałe filtry (wyszukiwanie, sortowanie, czas, trudność, składniki). #}
+    {% set keep = {} %}
+    {% if query %}{% set _ = keep.update(q=query) %}{% endif %}
+    {% if sort != 'nowe' %}{% set _ = keep.update(sort=sort) %}{% endif %}
+    {% if max_time %}{% set _ = keep.update(czas=max_time) %}{% endif %}
+    {% if difficulty %}{% set _ = keep.update(trudnosc=difficulty) %}{% endif %}
+    {% if ingredients_query %}{% set _ = keep.update(skladniki=ingredients_query) %}{% endif %}
     <div class="tag-list tag-filter">
       <a class="tag-chip {{ 'tag-chip-active' if not active_tag else '' }}"
-         href="{{ url_for('index', q=query) if query else url_for('index') }}">Wszystkie</a>
+         href="{{ url_for('index', **keep) }}">Wszystkie</a>
       {% for tag in all_tags %}
         <a class="tag-chip {{ 'tag-chip-active' if active_tag and active_tag.id == tag.id else '' }}"
-           href="{{ url_for('index', tag=tag.slug, q=query) if query else url_for('index', tag=tag.slug) }}">#{{ tag.name }}</a>
+           href="{{ url_for('index', tag=tag.slug, **keep) }}">#{{ tag.name }}</a>
       {% endfor %}
     </div>
+  {% endif %}
+
+  {% if ingredients_query and recipes %}
+    <p class="muted-info">Przepisy, w których wykorzystasz to, co masz — od najlepiej dopasowanych.
+      (Sól, pieprz, woda, cukier i olej nie są liczone jako brakujące.)</p>
   {% endif %}
 
   {% if recipes %}
     <div class="recipe-grid">
       {% for recipe in recipes %}
-        <a class="recipe-card" href="{{ url_for('recipe_detail', slug=recipe.slug) }}">
-          {% if recipe.image_url %}
-            <img src="{{ recipe.image_url }}" alt="{{ recipe.title }}">
-          {% else %}
-            <div class="recipe-card-placeholder">🍽️</div>
-          {% endif %}
-          <div class="recipe-card-body">
-            <h2>{{ recipe.title }}</h2>
-            {% if recipe.description %}<p>{{ recipe.description }}</p>{% endif %}
-            <div class="recipe-meta">
-              {% if recipe.servings %}<span>🍽 {{ recipe.servings }} porcji</span>{% endif %}
-              {% if recipe.pan_shape %}<span>⬭ {{ recipe.pan_dimensions_display }}</span>{% endif %}
-            </div>
-            {% if recipe.tags %}
-              <div class="tag-list">
-                {% for tag in recipe.tags %}<span class="tag-chip tag-chip-static">#{{ tag.name }}</span>{% endfor %}
-              </div>
-            {% endif %}
-          </div>
-        </a>
+        {{ recipe_card(recipe, rating_stats.get(recipe.id), matches.get(recipe.id)) }}
       {% endfor %}
     </div>
   {% else %}
     <p class="empty-state">
-      Brak przepisów{% if query %} pasujących do „{{ query }}”{% endif %}{% if active_tag %} z tagiem #{{ active_tag.name }}{% endif %}.
+      Brak przepisów{% if query %} pasujących do „{{ query }}”{% endif %}{% if active_tag %} z tagiem #{{ active_tag.name }}{% endif %}{% if ingredients_query %} ze składnikami „{{ ingredients_query }}”{% endif %}{% if max_time or difficulty %} przy wybranych filtrach{% endif %}.
     </p>
   {% endif %}
 {% endblock %}

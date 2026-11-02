@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Ulubione przepisy – Szczypta Smaku{% endblock %}
+
+{% block content %}
+  <h1>♥ Ulubione przepisy</h1>
+  <p class="muted-info">Ulubione są zapisane tylko w tej przeglądarce — nie potrzebujesz konta.</p>
+
+  <noscript><p class="empty-state">Ulubione wymagają włączonego JavaScriptu.</p></noscript>
+  <p class="empty-state" data-favorites-empty hidden>
+    Nie masz jeszcze ulubionych. Kliknij ♡ obok tytułu przepisu, aby go tu dodać.
+  </p>
+  <div class="recipe-grid" data-favorites-grid></div>
+
+  <script src="{{ url_for('static', filename='js/favorites.js') }}" defer></script>
+{% endblock %}

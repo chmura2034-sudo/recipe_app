@@ -9,6 +9,10 @@
       <a class="btn {{ 'btn-highlight' if blog_pending_count else 'btn-secondary' }}" href="{{ url_for('admin_blog') }}">
         📰 Blog{% if blog_pending_count %} ({{ blog_pending_count }} do zatwierdzenia){% endif %}
       </a>
+      <a class="btn {{ 'btn-highlight' if comments_pending_count else 'btn-secondary' }}" href="{{ url_for('admin_comments') }}">
+        💬 Komentarze{% if comments_pending_count %} ({{ comments_pending_count }} do moderacji){% endif %}
+      </a>
+      <a class="btn btn-secondary" href="{{ url_for('admin_stats') }}">📊 Statystyki</a>
       <a class="btn btn-secondary" href="{{ url_for('backup_page') }}">🗄 Kopia zapasowa</a>
       <a class="btn {{ 'btn-highlight' if pending_count else 'btn-secondary' }}" href="{{ url_for('review_queue') }}">
         📝 Kolejka zatwierdzania{% if pending_count %} ({{ pending_count }}){% endif %}

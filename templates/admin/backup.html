@@ -4,16 +4,20 @@
 {% block content %}
   <a class="back-link" href="{{ url_for('admin_dashboard') }}">&larr; Wróć do panelu administratora</a>
 
-  <h1>Kopia zapasowa przepisów</h1>
+  <h1>Kopia zapasowa</h1>
   <p class="muted-info">
-    W bazie jest obecnie <strong>{{ recipe_count }}</strong> przepis(ów) i <strong>{{ tag_count }}</strong> tag(ów).
+    W bazie jest obecnie <strong>{{ recipe_count }}</strong> przepis(ów), <strong>{{ tag_count }}</strong> tag(ów),
+    <strong>{{ blog_post_count }}</strong> wpis(ów) na blogu,
+    <strong>{{ comment_count }}</strong> komentarz(y) i <strong>{{ rating_count }}</strong> ocen(a/y).
   </p>
 
   <section class="backup-section">
     <h2>📦 Eksport</h2>
     <p>
       Pobierz archiwum ZIP zawierające wszystkie przepisy (tytuły, składniki, kroki, tagi,
-      informacje o formie i porcjach) w formacie JSON oraz kopie wszystkich zdjęć potraw.
+      informacje o formie, porcjach, czasie i trudności), wszystkie wpisy na blogu (razem ze
+      zdjęciami wstawionymi w treść), komentarze czytelników oraz oceny przepisów w formacie JSON,
+      a także kopie wszystkich zdjęć.
       Trzymaj ten plik w bezpiecznym miejscu — np. na dysku w chmurze albo na swoim komputerze —
       poza serwerem, na którym działa aplikacja. Dzięki temu odtworzysz bazę po awarii albo
       przeniesiesz ją na nowy serwer.
@@ -35,18 +39,20 @@
       <div class="restore-mode-options">
         <label class="restore-mode-option">
           <input type="radio" name="mode" value="merge" checked>
-          <span><strong>Uzupełnij i zaktualizuj</strong> — dopasowuje przepisy po tytule/slugu;
-            istniejące zostają nadpisane danymi z kopii, inne przepisy w bazie zostają bez zmian.</span>
+          <span><strong>Uzupełnij i zaktualizuj</strong> — dopasowuje przepisy i wpisy na blogu po
+            adresie (slugu); istniejące zostają nadpisane danymi z kopii, pozostałe w bazie bez zmian.</span>
         </label>
         <label class="restore-mode-option">
           <input type="radio" name="mode" value="skip_existing">
-          <span><strong>Dodaj tylko nowe</strong> — przepisy, które już istnieją w bazie
-            (ten sam tytuł/slug), zostają całkowicie pominięte i niezmienione.</span>
+          <span><strong>Dodaj tylko nowe</strong> — przepisy i wpisy, które już istnieją w bazie
+            (ten sam adres/slug), zostają całkowicie pominięte i niezmienione.</span>
         </label>
         <label class="restore-mode-option restore-mode-danger">
           <input type="radio" name="mode" value="wipe">
-          <span><strong>Zastąp wszystko</strong> — usuwa WSZYSTKIE obecne przepisy i tagi,
-            a następnie importuje zawartość pliku od nowa. Nieodwracalne.</span>
+          <span><strong>Zastąp wszystko</strong> — usuwa WSZYSTKIE obecne przepisy, tagi i wpisy
+            na blogu (razem z komentarzami i ocenami), a następnie importuje zawartość pliku od nowa.
+            Starsza kopia bez wpisów na blogu nie usuwa istniejących wpisów.
+            Nieodwracalne.</span>
         </label>
       </div>
 
@@ -57,6 +63,9 @@
   <section class="backup-section backup-tips">
     <h2>💡 Wskazówki</h2>
     <ul>
+      <li>Komentarze i oceny nigdy się nie dublują — import tej samej kopii kilka razy jest bezpieczny.
+        W trybie „Dodaj tylko nowe” istniejące oceny zostają bez zmian, w pozostałych trybach
+        są nadpisywane wartością z kopii.</li>
       <li>Rób kopię zapasową regularnie — po większych zmianach w przepisach, a najlepiej też
         cyklicznie (np. raz w tygodniu).</li>
       <li>Plik ZIP jest czytelny i przenośny — możesz go otworzyć i zajrzeć do <code>recipes.json</code>,
@@ -75,7 +84,7 @@
       const mode = document.querySelector('input[name="mode"]:checked').value;
       if (mode === "wipe") {
         const confirmed = confirm(
-          "Ta operacja USUNIE wszystkie obecne przepisy i tagi, a następnie zaimportuje zawartość pliku.\n\nTa operacja jest nieodwracalna. Kontynuować?"
+          "Ta operacja USUNIE wszystkie obecne przepisy, tagi i wpisy na blogu (wraz z komentarzami i ocenami), a następnie zaimportuje zawartość pliku.\n\nTa operacja jest nieodwracalna. Kontynuować?"
         );
         if (!confirmed) e.preventDefault();
       }

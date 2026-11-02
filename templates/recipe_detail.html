@@ -1,5 +1,18 @@
 {% extends "base.html" %}
+{% from "_recipe_card.html" import recipe_card %}
 {% block title %}{{ recipe.title }} – Szczypta Smaku{% endblock %}
+
+{% block head %}
+  {% if recipe.description %}<meta name="description" content="{{ recipe.description }}">{% endif %}
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="{{ recipe.title }}">
+  {% if recipe.description %}<meta property="og:description" content="{{ recipe.description }}">{% endif %}
+  {% if recipe.image_url %}<meta property="og:image" content="{{ request.host_url.rstrip('/') ~ recipe.image_url }}">{% endif %}
+  {% if recipe_jsonld %}
+    {# |tojson escapuje <, >, & i ' — treść przepisu nie może zamknąć znacznika <script>. #}
+    <script type="application/ld+json" nonce="{{ csp_nonce }}">{{ recipe_jsonld | tojson }}</script>
+  {% endif %}
+{% endblock %}
 
 {% block content %}
   <a class="back-link" href="{{ url_for('index') }}">&larr; Wróć do listy przepisów</a>
@@ -9,7 +22,13 @@
       <img class="recipe-detail-img" src="{{ recipe.image_url }}" alt="{{ recipe.title }}">
     {% endif %}
 
-    <h1>{{ recipe.title }}</h1>
+    <div class="recipe-title-row">
+      <h1>{{ recipe.title }}</h1>
+      {# Obsługuje static/js/recipe.js — ulubione zapisywane w przeglądarce. #}
+      <button type="button" class="favorite-toggle" data-favorite-toggle
+              data-recipe-slug="{{ recipe.slug }}" aria-pressed="false" hidden
+              title="Dodaj do ulubionych" aria-label="Dodaj do ulubionych">♡</button>
+    </div>
     {% if recipe.description %}<p class="recipe-description">{{ recipe.description }}</p>{% endif %}
 
     {% if recipe.status == "pending" %}
@@ -25,6 +44,8 @@
     {% endif %}
 
     <div class="recipe-meta">
+      {% if recipe.prep_time_min %}<span>⏱ Czas: {{ recipe.prep_time_display }}</span>{% endif %}
+      {% if recipe.difficulty %}<span>📶 Trudność: <span class="difficulty difficulty-{{ recipe.difficulty }}">{{ recipe.difficulty_display }}</span></span>{% endif %}
       {% if recipe.servings %}<span id="servingsMeta">🍽 Porcje: <span id="servingsValue">{{ recipe.servings }}</span></span>{% endif %}
       {% if recipe.pan_shape %}<span id="panMeta">⬭ Forma: <span id="panValue">{{ recipe.pan_dimensions_display }}</span></span>{% endif %}
     </div>
@@ -36,6 +57,35 @@
         {% endfor %}
       </div>
     {% endif %}
+
+    <div class="rating-box" id="ocena">
+      <div class="rating-summary">
+        {% if rating_count %}
+          <span class="rating-stars-static" aria-hidden="true">
+            {%- for i in range(1, 6) -%}<span class="{{ 'star-on' if rating_avg >= i - 0.25 else 'star-off' }}">★</span>{%- endfor -%}
+          </span>
+          <strong>{{ rating_avg }}</strong>/5
+          <span class="rating-count">({{ rating_count }} {{ 'ocena' if rating_count == 1 else ('oceny' if rating_count % 10 in [2, 3, 4] and rating_count % 100 not in [12, 13, 14] else 'ocen') }})</span>
+        {% else %}
+          <span class="rating-count">Ten przepis nie ma jeszcze ocen.</span>
+        {% endif %}
+      </div>
+      {% if recipe.status == "published" %}
+        <form method="post" action="{{ url_for('recipe_rate', slug=recipe.slug) }}" class="rating-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <span class="rating-form-label">{{ 'Twoja ocena:' if my_rating else 'Oceń przepis:' }}</span>
+          {# Kolejność odwrócona (5→1) + flex-direction: row-reverse — pozwala podświetlić
+             w CSS gwiazdkę pod kursorem i wszystkie "przed" nią, bez JavaScriptu. #}
+          <span class="rating-input">
+            {% for i in range(5, 0, -1) %}
+              <button type="submit" name="score" value="{{ i }}"
+                      class="{{ 'star-selected' if my_rating and my_rating >= i else '' }}"
+                      title="{{ i }} / 5" aria-label="Oceń na {{ i }} z 5">★</button>
+            {% endfor %}
+          </span>
+        </form>
+      {% endif %}
+    </div>
 
     {# Widoczne tylko na telefonach/tabletach (pokazuje app.js) — przydatne podczas gotowania. #}
     <button type="button" class="wake-lock-toggle" data-wake-lock aria-pressed="false" hidden>
@@ -113,14 +163,23 @@
     {% endif %}
 
     <section>
-      <h2>Składniki</h2>
+      <div class="steps-header">
+        <h2>Składniki</h2>
+        {# Przycisk obsługuje static/js/recipe.js — bierze ilości PO przeliczeniu porcji/formy. #}
+        <button type="button" class="btn btn-small btn-secondary" data-add-to-shopping
+                data-recipe-slug="{{ recipe.slug }}" data-recipe-title="{{ recipe.title }}"
+                data-recipe-url="{{ url_for('recipe_detail', slug=recipe.slug) }}" hidden>
+          🛒 Dodaj do listy zakupów
+        </button>
+      </div>
+      <p class="shopping-feedback" data-shopping-feedback role="status"></p>
       <div id="ingredientsList">
         {% for section in recipe.ingredients_sections %}
           {% if section["items"] %}
             {% if section.name %}<h3 class="ingredient-section-title">{{ section.name }}</h3>{% endif %}
             <ul class="ingredients-list">
               {% for item in section["items"] %}
-                <li>
+                <li data-ingredient-name="{{ item.name }}" data-ingredient-unit="{{ item.unit }}">
                   {% if item.amount or item.unit %}
                     <span class="ingredient-amount"><span class="amount-value" data-original="{{ item.amount }}">{{ item.amount }}</span>{% if item.unit %} {{ item.unit }}{% endif %}</span>
                   {% endif %}
@@ -209,6 +268,20 @@
     {% endif %}
   </article>
 
+  {% if similar %}
+    <section class="similar-recipes">
+      <h2>{{ "Podobne przepisy" if similar_by_tags else "Inne przepisy" }}</h2>
+      <div class="recipe-grid">
+        {% for other in similar %}{{ recipe_card(other, similar_stats.get(other.id)) }}{% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% set comment_action = url_for('recipe_comment', slug=recipe.slug) %}
+  {% set can_comment = recipe.status == "published" %}
+  {% include "_comments.html" %}
+
+  <script src="{{ url_for('static', filename='js/recipe.js') }}" defer></script>
   <script nonce="{{ csp_nonce }}">
     // Zaznaczanie wykonanych kroków — stan zapamiętywany lokalnie w przeglądarce (per przepis)
     (function () {

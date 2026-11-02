@@ -159,6 +159,23 @@
         </div>
       </div>
 
+      <div class="form-row">
+        <div>
+          <label for="prep_time_min">Czas przygotowania (minuty, łącznie)</label>
+          <input type="number" id="prep_time_min" name="prep_time_min" min="1" max="10080"
+                 placeholder="np. 45" value="{{ recipe.prep_time_min if recipe and recipe.prep_time_min else '' }}">
+        </div>
+        <div>
+          <label for="difficulty">Poziom trudności</label>
+          <select id="difficulty" name="difficulty">
+            <option value="">— nie podano —</option>
+            {% for key, label in difficulties.items() %}
+              <option value="{{ key }}" {{ 'selected' if recipe and recipe.difficulty == key else '' }}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
       <!-- ---------- TAGI ---------- -->
       <label for="tags">Tagi (oddziel przecinkami)</label>
       <input type="text" id="tags" name="tags" placeholder="np. obiad, wegańskie, deser"

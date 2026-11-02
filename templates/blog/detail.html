@@ -38,4 +38,8 @@
       </div>
     {% endif %}
   </article>
+
+  {% set comment_action = url_for('blog_comment', slug=post.slug) %}
+  {% set can_comment = post.status == "published" %}
+  <div class="blog-post">{% include "_comments.html" %}</div>
 {% endblock %}

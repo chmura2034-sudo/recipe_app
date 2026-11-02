@@ -6,6 +6,10 @@
   <meta name="theme-color" content="#a3461f">
   <title>{% block title %}Szczypta Smaku{% endblock %}</title>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+  <link rel="manifest" href="{{ url_for('web_manifest') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Szczypta Smaku">
   <script nonce="{{ csp_nonce }}">
     // Ustawia motyw PRZED narysowaniem strony (bez „mignięcia" jasnego tła).
     // Zapisany wybór ma pierwszeństwo, w przeciwnym razie motyw systemowy.
@@ -17,7 +21,9 @@
       document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
     })();
   </script>
+  {% block head %}{% endblock %}
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='js/shopping-store.js') }}" defer></script>
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
 </head>
 <body>
@@ -33,6 +39,8 @@
       {% set ep = request.endpoint or '' %}
       <a href="{{ url_for('index') }}" class="{{ 'nav-active' if ep in ('index', 'recipe_detail') else '' }}">Przepisy</a>
       <a href="{{ url_for('blog_index') }}" class="{{ 'nav-active' if ep in ('blog_index', 'blog_detail') else '' }}">Blog</a>
+      <a href="{{ url_for('favorites') }}" class="{{ 'nav-active' if ep == 'favorites' else '' }}">♥ Ulubione</a>
+      <a href="{{ url_for('shopping_list') }}" class="{{ 'nav-active' if ep == 'shopping_list' else '' }}" title="Lista zakupów">🛒 Lista zakupów</a>
       {% if current_user.is_authenticated %}
         {% if current_user.is_admin %}
           <a href="{{ url_for('admin_dashboard') }}">Panel administratora</a>
@@ -53,6 +61,10 @@
     </nav>
   </header>
 
+  <div class="offline-banner" data-offline-banner role="status" hidden>
+    📴 Jesteś offline — widzisz zapisaną wersję strony. Komentarze i oceny wyślesz po powrocie sieci.
+  </div>
+
   <main class="container">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -71,6 +83,8 @@
     <img src="{{ url_for('static', filename='logo.png') }}" alt="" class="footer-logo">
     <p class="footer-name">Szczypta Smaku</p>
     <p class="footer-tagline">Przepisy · Blog kulinarny</p>
+    {# Pokazywany przez app.js, gdy przeglądarka pozwala zainstalować aplikację. #}
+    <button type="button" class="btn btn-small install-app-btn" data-install-app hidden>📲 Zainstaluj aplikację</button>
     <p>&copy; 2026 Szczypta Smaku</p>
   </footer>
 </body>

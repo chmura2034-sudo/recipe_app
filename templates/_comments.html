@@ -1,0 +1,60 @@
+{# Sekcja komentarzy — dołączana pod przepisem i wpisem na blogu.
+   Wymaga zmiennych: comments, comment_action (URL formularza), can_comment,
+   comment_form_ts, comment_name_max, comment_content_max. #}
+<section class="comments-section" id="komentarze">
+  <h2>Komentarze{% if comments %} ({{ comments|length }}){% endif %}</h2>
+
+  {% if comments %}
+    <ul class="comment-list">
+      {% for comment in comments %}
+        <li class="comment" id="komentarz-{{ comment.id }}">
+          <div class="comment-header">
+            <strong class="comment-author">{{ comment.author_name }}</strong>
+            <time class="comment-date" datetime="{{ comment.created_at.isoformat() }}">
+              {{ comment.created_at.strftime('%d.%m.%Y, %H:%M') }}
+            </time>
+            {% if current_user.is_authenticated and current_user.is_admin %}
+              <form method="post" action="{{ url_for('comment_delete', comment_id=comment.id) }}"
+                    class="comment-admin-form" data-confirm="Usunąć ten komentarz?">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="next" value="{{ request.path }}#komentarze">
+                <button type="submit" class="nav-link-button comment-delete-btn">Usuń</button>
+              </form>
+            {% endif %}
+          </div>
+          {# Czysty tekst — Jinja escapuje HTML; nowe linie zachowuje CSS (white-space: pre-line). #}
+          <p class="comment-content">{{ comment.content }}</p>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">Nikt jeszcze nie skomentował. Bądź pierwszy!</p>
+  {% endif %}
+
+  {% if can_comment %}
+    <form method="post" action="{{ comment_action }}" class="styled-form comment-form">
+      <h3>Dodaj komentarz</h3>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="form_ts" value="{{ comment_form_ts }}">
+      {# Pułapka na boty — ludzie tego pola nie widzą i go nie wypełniają. #}
+      <div class="hp-field" aria-hidden="true">
+        <label for="website">Nie wypełniaj tego pola</label>
+        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+      </div>
+
+      <label for="author_name">Podpis</label>
+      <input type="text" id="author_name" name="author_name" required
+             maxlength="{{ comment_name_max }}" autocomplete="nickname">
+
+      <label for="comment_content">Komentarz</label>
+      <textarea id="comment_content" name="content" rows="4" required
+                maxlength="{{ comment_content_max }}"></textarea>
+
+      <p class="muted-info comment-note">
+        Komentarz jest publiczny i pojawi się po zatwierdzeniu przez moderatora.
+        Nie zbieramy adresu e-mail.
+      </p>
+      <button type="submit" class="btn">Wyślij komentarz</button>
+    </form>
+  {% endif %}
+</section>

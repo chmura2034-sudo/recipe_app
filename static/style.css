@@ -991,3 +991,186 @@ h1 { margin-top: 0; }
 :root[data-theme="dark"] .editor-status-error { color: #f2aaaa; }
 :root[data-theme="dark"] .recipe-card:hover,
 :root[data-theme="dark"] .blog-card:hover { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45); }
+
+/* ---------- oceny przepisów ---------- */
+.rating-badge { color: #b8741a; font-weight: 600; }
+.rating-badge small { color: var(--muted); font-weight: 400; }
+.rating-box {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 0.6rem 1.2rem; margin: 1rem 0; padding: 0.7rem 1rem;
+  background: var(--cream); border: 1px solid var(--border); border-radius: 10px;
+}
+.rating-summary { display: flex; align-items: center; gap: 0.4rem; }
+.rating-stars-static { font-size: 1.2rem; letter-spacing: 1px; }
+.star-on { color: #e0a32e; }
+.star-off { color: var(--border); }
+.rating-count { color: var(--muted); font-size: 0.9rem; }
+.rating-form { display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+.rating-form-label { font-size: 0.9rem; color: var(--muted); }
+.rating-input { display: inline-flex; flex-direction: row-reverse; }
+.rating-input button {
+  background: none; border: none; padding: 0 0.1rem; cursor: pointer;
+  font-size: 1.6rem; line-height: 1; color: var(--border); transition: color 0.1s, transform 0.1s;
+}
+.rating-input button.star-selected { color: #e0a32e; }
+/* Podświetlenie gwiazdki pod kursorem i wszystkich niższych (rodzeństwo "za" nią w DOM). */
+.rating-input:hover button { color: var(--border); }
+.rating-input button:hover,
+.rating-input button:hover ~ button,
+.rating-input button:focus-visible,
+.rating-input button:focus-visible ~ button { color: #f0b440; }
+.rating-input button:hover { transform: scale(1.15); }
+
+/* ---------- komentarze ---------- */
+.comments-section { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+.comments-section h2 { margin-top: 0; }
+.comment-list { list-style: none; padding: 0; margin: 0 0 1.5rem; }
+.comment {
+  padding: 0.8rem 1rem; margin-bottom: 0.7rem;
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+}
+.comment-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.6rem; margin-bottom: 0.3rem; }
+.comment-date { color: var(--muted); font-size: 0.8rem; }
+.comment-admin-form { margin: 0 0 0 auto; }
+.comment-delete-btn { font-size: 0.8rem; color: var(--primary); }
+.comment-content { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+.comment-form { max-width: 600px; }
+.comment-form h3 { margin-top: 0; }
+.comment-note { font-size: 0.85rem; }
+.hp-field { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+:root[data-theme="dark"] .rating-badge { color: #f0b440; }
+
+/* ---------- lista zakupów ---------- */
+.shopping-feedback { min-height: 1.2em; margin: 0 0 0.5rem; font-size: 0.9rem; color: var(--primary); }
+.shopping-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 1rem 0; }
+.shopping-copy-status { font-size: 0.85rem; color: var(--muted); }
+.shopping-items { list-style: none; padding: 0; margin: 0 0 2rem; max-width: 640px; }
+.shopping-item label {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem;
+  padding: 0.55rem 0.3rem; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.shopping-item input { transform: scale(1.2); }
+.shopping-amount { min-width: 5.5rem; }
+.shopping-source { flex-basis: 100%; margin-left: 1.8rem; color: var(--muted); font-size: 0.78rem; }
+.shopping-item-done label { opacity: 0.55; }
+.shopping-item-done label span, .shopping-item-done .shopping-amount { text-decoration: line-through; }
+.shopping-recipes { padding-left: 1.2rem; }
+.shopping-recipes li { margin-bottom: 0.3rem; }
+.shopping-remove { margin-left: 0.6rem; font-size: 0.82rem; color: var(--primary); }
+
+/* ---------- ulubione ---------- */
+.recipe-title-row { display: flex; align-items: flex-start; gap: 0.6rem; }
+.recipe-title-row h1 { flex: 1; }
+.favorite-toggle {
+  flex-shrink: 0; margin-top: 0.4rem; width: 2.6rem; height: 2.6rem; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--card-bg); color: var(--primary);
+  font-size: 1.4rem; line-height: 1; cursor: pointer; transition: transform 0.15s;
+}
+.favorite-toggle:hover { transform: scale(1.08); }
+.favorite-toggle.is-favorite { background: var(--accent-soft); color: #c2334d; }
+.recipe-card { position: relative; }
+.favorite-badge {
+  display: none; position: absolute; top: 0.5rem; right: 0.5rem; z-index: 1;
+  width: 2rem; height: 2rem; border-radius: 50%; align-items: center; justify-content: center;
+  background: rgba(255, 253, 249, 0.92); color: #c2334d; font-size: 1.05rem;
+}
+.recipe-card.is-favorite .favorite-badge { display: inline-flex; }
+
+/* ---------- filtry i sortowanie listy przepisów ---------- */
+.search-form { flex-wrap: wrap; }
+.search-form .filters { flex-basis: 100%; }
+.filters summary { cursor: pointer; color: var(--primary); font-weight: 600; font-size: 0.92rem; padding: 0.2rem 0; }
+.filters-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.6rem 1rem;
+  margin-top: 0.6rem; padding: 0.9rem; background: var(--cream); border: 1px solid var(--border); border-radius: 10px;
+}
+.filters-grid label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem; }
+.filters-grid input, .filters-grid select {
+  width: 100%; box-sizing: border-box; padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); color: var(--text);
+}
+.filters-ingredients { grid-column: 1 / -1; }
+.filters-actions { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
+.search-form .filters-actions .btn-secondary { background: var(--muted); }
+.ingredient-match { font-size: 0.85rem; color: #2f7a3e; margin: 0 0 0.5rem; }
+.ingredient-match small { color: var(--muted); }
+.ingredient-match-full { font-weight: 600; }
+:root[data-theme="dark"] .ingredient-match { color: #9fdcae; }
+.difficulty { font-weight: 600; }
+.difficulty-latwy { color: #2f7a3e; }
+.difficulty-sredni { color: #b8741a; }
+.difficulty-trudny { color: #a3242f; }
+:root[data-theme="dark"] .difficulty-latwy { color: #9fdcae; }
+:root[data-theme="dark"] .difficulty-sredni { color: #f0cd85; }
+:root[data-theme="dark"] .difficulty-trudny { color: #f2aaaa; }
+
+/* ---------- minutniki w krokach ---------- */
+.step-timers { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.35rem 0 0 2rem; }
+.step-timer { display: inline-flex; align-items: center; gap: 0.2rem; }
+.step-timer-btn, .step-timer-reset {
+  border: 1px solid var(--border); background: var(--card-bg); color: var(--primary);
+  border-radius: 999px; padding: 0.2rem 0.7rem; font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.step-timer-reset { padding: 0.2rem 0.5rem; color: var(--muted); }
+.step-timer-running .step-timer-btn { background: var(--primary); color: #fff; border-color: var(--primary); }
+.step-timer-paused .step-timer-btn { background: var(--accent-soft); }
+.step-timer-done .step-timer-btn { background: #2f7a3e; color: #fff; border-color: #2f7a3e; animation: timer-pulse 0.8s ease-in-out 6; }
+:root[data-theme="dark"] .step-timer-running .step-timer-btn { color: #1d1612; }
+@keyframes timer-pulse { 50% { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .step-timer-done .step-timer-btn { animation: none; } }
+
+/* ---------- podobne przepisy ---------- */
+.similar-recipes { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+.similar-recipes h2 { margin-top: 0; }
+
+/* ---------- statystyki ---------- */
+:root { --chart-bar: #a3461f; --chart-grid: #ece0d2; }
+:root[data-theme="dark"] { --chart-bar: #c96e43; --chart-grid: #3a2d24; }
+.stats-periods { display: flex; gap: 0.4rem; }
+.stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.8rem; margin: 1rem 0 1.5rem; }
+.stat-tile {
+  display: flex; flex-direction: column; gap: 0.2rem; padding: 0.9rem 1rem;
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); text-decoration: none;
+}
+.stat-tile-link:hover { border-color: var(--primary); }
+.stat-label { font-size: 0.82rem; color: var(--muted); }
+.stat-value { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.bar-chart { display: flex; gap: 0.5rem; height: 200px; }
+.bar-chart-axis {
+  display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end;
+  font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2ch;
+  margin: -0.45em 0;
+}
+.bar-chart-plot {
+  flex: 1; display: grid; grid-template-columns: repeat(var(--bars), 1fr); gap: 2px; align-items: end;
+  border-bottom: 1px solid var(--muted);
+  background: linear-gradient(to bottom, var(--chart-grid) 1px, transparent 1px) 0 0 / 100% 50%;
+}
+.bar-slot { position: relative; height: 100%; display: flex; align-items: flex-end; cursor: default; outline: none; }
+.bar { width: 100%; max-width: 28px; margin: 0 auto; background: var(--chart-bar); border-radius: 4px 4px 0 0; min-height: 0; }
+.bar-slot:hover, .bar-slot:focus-visible { background: rgba(127, 127, 127, 0.08); }
+.bar-tooltip {
+  display: none; position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  white-space: nowrap; padding: 0.3rem 0.5rem; border-radius: 6px; font-size: 0.78rem;
+  background: var(--text); color: var(--bg); pointer-events: none; z-index: 2;
+}
+.bar-slot:hover .bar-tooltip, .bar-slot:focus-visible .bar-tooltip { display: block; bottom: auto; top: -2.1rem; }
+.bar-chart-dates { display: flex; justify-content: space-between; margin: 0.3rem 0 0 2.5rem; font-size: 0.72rem; color: var(--muted); }
+.stats-table-toggle { margin-top: 0.8rem; }
+.stats-table-toggle summary { cursor: pointer; color: var(--primary); font-size: 0.9rem; }
+.stats-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+.admin-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.stats-columns .admin-table a { color: var(--primary); text-decoration: none; }
+.stats-columns .admin-table a:hover { text-decoration: underline; }
+
+/* ---------- PWA ---------- */
+.offline-banner {
+  padding: 0.55rem 1rem; text-align: center; font-size: 0.9rem;
+  background: #fdf0d5; color: #92620a; border-bottom: 1px solid var(--border);
+}
+:root[data-theme="dark"] .offline-banner { background: #3f321a; color: #f0cd85; }
+.install-app-btn { margin: 0.6rem 0; }
+.offline-list li { margin-bottom: 0.35rem; }

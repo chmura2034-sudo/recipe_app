@@ -1,15 +1,15 @@
 {
   "app.py": {
-    "mtime": 1793631106.7316916,
-    "seen": 1793631212.3496304,
-    "ast_hash": "9b5b4e8dda04deb5b2ec1a9c2cb6687f",
+    "mtime": 1793634442.151019,
+    "seen": 1793634558.1286695,
+    "ast_hash": "4e63ce6ddead507a3d2dcc9f0de3d763",
     "semantic_hash": ""
   },
   "config.py": {
-    "mtime": 1793559284.0511515,
-    "seen": 1793630376.7183192,
-    "ast_hash": "d2d540429fe7018a8e9b54b382383f6b",
-    "semantic_hash": "d2d540429fe7018a8e9b54b382383f6b"
+    "mtime": 1793634382.9881127,
+    "seen": 1793634558.1286771,
+    "ast_hash": "ee3099cf73f11ac51e5e7b7ce2aeed9b",
+    "semantic_hash": ""
   },
   "migrations/env.py": {
     "mtime": 1793559284.052117,
@@ -24,16 +24,16 @@
     "semantic_hash": "8b43f42b3f3922dd0fa41a812fb08f21"
   },
   "models.py": {
-    "mtime": 1793631094.582434,
-    "seen": 1793631212.3496525,
-    "ast_hash": "8b4903edde7565c01217bba1c09832e0",
+    "mtime": 1793634374.5899353,
+    "seen": 1793634558.1286948,
+    "ast_hash": "e8b3adeea3c3f38d42e08a82f1132657",
     "semantic_hash": ""
   },
   "static/js/app.js": {
-    "mtime": 1793559284.0515401,
-    "seen": 1793630376.7183287,
-    "ast_hash": "bc750a0554e178da6078f22066119829",
-    "semantic_hash": "bc750a0554e178da6078f22066119829"
+    "mtime": 1793633604.0000327,
+    "seen": 1793634558.1286972,
+    "ast_hash": "fcc57e56dd3e7a9f0af357642ef82778",
+    "semantic_hash": ""
   },
   "wsgi.py": {
     "mtime": 1793559284.0529454,
@@ -60,9 +60,9 @@
     "semantic_hash": ""
   },
   "templates/admin/dashboard.html": {
-    "mtime": 1793632941.4273791,
-    "seen": 1793632971.6039593,
-    "ast_hash": "722f6cd9a89acb902de13621efec3d2c",
+    "mtime": 1793634442.1517456,
+    "seen": 1793634558.128719,
+    "ast_hash": "f590f600454234c2ef9a802718410781",
     "semantic_hash": ""
   },
   "templates/admin/editors.html": {
@@ -84,9 +84,9 @@
     "semantic_hash": ""
   },
   "templates/base.html": {
-    "mtime": 1793632941.4685574,
-    "seen": 1793632971.603967,
-    "ast_hash": "953d653f7ef0c7772fb739eb560accd6",
+    "mtime": 1793633603.9998019,
+    "seen": 1793634558.1287274,
+    "ast_hash": "2c636bd1590610be06695a6e521cd6d5",
     "semantic_hash": ""
   },
   "templates/errors.html": {
@@ -96,9 +96,9 @@
     "semantic_hash": ""
   },
   "templates/index.html": {
-    "mtime": 1793632941.4272768,
-    "seen": 1793632971.603975,
-    "ast_hash": "e8539b0ee6a7d102f66dfab6edc6400f",
+    "mtime": 1793634527.729946,
+    "seen": 1793634558.128736,
+    "ast_hash": "be73b15ee0c0081d36d8794ad5c1164f",
     "semantic_hash": ""
   },
   "templates/login.html": {
@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "templates/recipe_detail.html": {
-    "mtime": 1793632941.4276016,
-    "seen": 1793632971.6039786,
-    "ast_hash": "710bfbcd726a51438bf7fca2fbe73e7a",
+    "mtime": 1793634475.7866557,
+    "seen": 1793634558.1287398,
+    "ast_hash": "e822fd94f6b7a47c608294673f776152",
     "semantic_hash": ""
   },
   "templates/redaktor/dashboard.html": {
@@ -144,9 +144,9 @@
     "semantic_hash": ""
   },
   "templates/blog/detail.html": {
-    "mtime": 1793632941.4267168,
-    "seen": 1793632971.6039693,
-    "ast_hash": "e0af6006b51983ecd5ab1dbe0cddcdbe",
+    "mtime": 1793634475.7868514,
+    "seen": 1793634558.1287298,
+    "ast_hash": "a4e0dc52834171132b6a6f942ec82043",
     "semantic_hash": ""
   },
   "templates/blog/index.html": {
@@ -161,64 +161,22 @@
     "ast_hash": "3d3b426147a30fc09b2f1f119ef19f08",
     "semantic_hash": ""
   },
-  "static/uploads/b6dac87bd647495f8a274f13271847e0.jpg": {
-    "mtime": 1793630977.4284203,
-    "seen": 1793631212.3497012,
-    "ast_hash": "4d15b5c9939582106fbf247c6690e7d6",
+  "migrations/versions/b7c8d9e0f1a2_comments_ratings.py": {
+    "mtime": 1793634374.6639352,
+    "seen": 1793634558.1286922,
+    "ast_hash": "2fbcb715db972bf44bba60eac87faa79",
     "semantic_hash": ""
   },
-  "static/uploads/0b931cc32a8d49938a8905398600ee0f.jpg": {
-    "mtime": 1793631492.2736833,
-    "seen": 1793632971.6039846,
-    "ast_hash": "56755ac597a783abf92d4ccb8d0cf398",
+  "templates/_comments.html": {
+    "mtime": 1793634461.749043,
+    "seen": 1793634558.1287084,
+    "ast_hash": "87d670542cce3c764522260d111dc66d",
     "semantic_hash": ""
   },
-  "static/uploads/1b33d2e306024c9cb8435597935e004d.jpg": {
-    "mtime": 1793632021.0698345,
-    "seen": 1793632971.6039875,
-    "ast_hash": "e55794d2939ffee619eab76a6f2d6796",
-    "semantic_hash": ""
-  },
-  "static/uploads/417db085dd3c4412bcf70ce3ebabe707.jpg": {
-    "mtime": 1793632021.1428344,
-    "seen": 1793632971.6039896,
-    "ast_hash": "b81e7ae7bf62dae6b209d4c02fa3c3f0",
-    "semantic_hash": ""
-  },
-  "static/uploads/4de6035a10f24ace958290fc365b2e68.png": {
-    "mtime": 1793632021.0538344,
-    "seen": 1793632971.603991,
-    "ast_hash": "5314e529be2928d9957c3fdd12ff4a62",
-    "semantic_hash": ""
-  },
-  "static/uploads/76f5a7a2e1934b43ade0f8109a8cbc94.jpg": {
-    "mtime": 1793631529.3056965,
-    "seen": 1793632971.603993,
-    "ast_hash": "4d15b5c9939582106fbf247c6690e7d6",
-    "semantic_hash": ""
-  },
-  "static/uploads/a97f0fd99846482c87a7786943c68c8b.jpg": {
-    "mtime": 1793632021.1208344,
-    "seen": 1793632971.6039946,
-    "ast_hash": "5c58d4d6a1a16a9831de3dd5442d0cd7",
-    "semantic_hash": ""
-  },
-  "static/uploads/b90c2f0b044b4075b1862eb1f4b06942.jpg": {
-    "mtime": 1793632021.1088345,
-    "seen": 1793632971.603999,
-    "ast_hash": "41d0838db24976c1f178856c1c3ebeaf",
-    "semantic_hash": ""
-  },
-  "static/uploads/bcdd41fbcc62478da85e7c2a2b719e14.jpg": {
-    "mtime": 1793632021.1328344,
-    "seen": 1793632971.6040008,
-    "ast_hash": "d93e395ccbae18f9480a4d0a388a7cfa",
-    "semantic_hash": ""
-  },
-  "static/uploads/d94cbb7437214fb6876b930613e5e4c4.jpg": {
-    "mtime": 1793632021.0908344,
-    "seen": 1793632971.6040025,
-    "ast_hash": "e702988f0439c0402cd3ac5d373b7c1c",
+  "templates/admin/comments.html": {
+    "mtime": 1793634461.9820433,
+    "seen": 1793634558.128717,
+    "ast_hash": "60344395bf9033d7282fd678b0c269a0",
     "semantic_hash": ""
   }
 }

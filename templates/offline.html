@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Brak połączenia – Szczypta Smaku{% endblock %}
+
+{% block content %}
+  <h1>📴 Brak połączenia z internetem</h1>
+  <p>Tej strony nie ma jeszcze w pamięci urządzenia. Przepisy, które już otwierałeś(-aś),
+     są dostępne offline — poniżej ich lista.</p>
+
+  <p>
+    <a class="btn btn-small" href="{{ url_for('shopping_list') }}">🛒 Lista zakupów</a>
+    <a class="btn btn-small btn-secondary" href="{{ url_for('favorites') }}">♥ Ulubione</a>
+  </p>
+
+  <h2>Zapisane przepisy</h2>
+  <ul class="offline-list" data-offline-recipes>
+    <li class="empty-state">Brak zapisanych przepisów.</li>
+  </ul>
+
+  <h2>Zapisane wpisy na blogu</h2>
+  <ul class="offline-list" data-offline-posts>
+    <li class="empty-state">Brak zapisanych wpisów.</li>
+  </ul>
+
+  <script src="{{ url_for('static', filename='js/offline.js') }}" defer></script>
+{% endblock %}

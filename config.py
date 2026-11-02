@@ -75,6 +75,9 @@ class Config:
     # Magazyn liczników limitów. "memory://" działa tylko dla jednego procesu;
     # przy kilku workerach użyj współdzielonego, np. redis://redis:6379/0
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
+    # Limity dla czytelników (per adres IP): dodawanie komentarzy i ocen.
+    COMMENT_RATE_LIMIT = os.environ.get("COMMENT_RATE_LIMIT", "5 per 10 minutes;20 per day")
+    RATING_RATE_LIMIT = os.environ.get("RATING_RATE_LIMIT", "20 per hour")
     RATELIMIT_HEADERS_ENABLED = False
 
     # ---- Sesja i ciasteczka ----

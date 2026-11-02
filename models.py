@@ -28,6 +28,9 @@ RECIPE_STATUSES = {
 # okragla -> jeden wymiar (średnica), prostokatna -> dwa wymiary (bok x bok)
 PAN_SHAPES = {"okragla": "okrągła", "prostokatna": "prostokątna"}
 
+# Poziomy trudności przepisu.
+DIFFICULTIES = {"latwy": "łatwy", "sredni": "średni", "trudny": "trudny"}
+
 # Tabela pośrednicząca dla relacji wiele-do-wielu Recipe <-> Tag
 recipe_tags = db.Table(
     "recipe_tags",
@@ -109,6 +112,9 @@ class Recipe(db.Model):
     instructions = db.Column(db.Text, nullable=False)
     servings = db.Column(db.Integer)
     image_url = db.Column(db.String(500))
+    # Całkowity czas przygotowania w minutach oraz poziom trudności (klucz z DIFFICULTIES).
+    prep_time_min = db.Column(db.Integer)
+    difficulty = db.Column(db.String(20))
 
     # Forma do pieczenia: kształt ("okragla" / "prostokatna")
     # okragla -> pan_size_cm to średnica
@@ -237,6 +243,20 @@ class Recipe(db.Model):
     @property
     def instructions_list(self):
         return [line.strip() for line in (self.instructions or "").splitlines() if line.strip()]
+
+    @property
+    def difficulty_display(self):
+        return DIFFICULTIES.get(self.difficulty, "")
+
+    @property
+    def prep_time_display(self):
+        """Czas przygotowania w czytelnej formie, np. '45 min' albo '1 h 30 min'."""
+        if not self.prep_time_min:
+            return ""
+        hours, minutes = divmod(self.prep_time_min, 60)
+        if not hours:
+            return f"{minutes} min"
+        return f"{hours} h {minutes} min" if minutes else f"{hours} h"
 
     @property
     def pan_shape_display(self):
@@ -384,3 +404,112 @@ class BlogPost(db.Model):
 
     def __repr__(self):
         return f"<BlogPost {self.title}>"
+
+
+# Statusy komentarza: komentarze czytelników trafiają do moderacji, zanim staną się publiczne.
+COMMENT_STATUSES = {
+    "pending": "Oczekuje na moderację",
+    "published": "Opublikowany",
+}
+
+# Limity długości pól komentarza.
+COMMENT_NAME_MAX = 60
+COMMENT_CONTENT_MAX = 2000
+
+
+class Comment(db.Model):
+    """
+    Komentarz czytelnika pod przepisem ALBO wpisem na blogu (dokładnie jedno z dwóch).
+
+    Czytelnicy nie mają kont — podają tylko pseudonim. Treść to czysty tekst
+    (Jinja ją escapuje), bez HTML ani Markdownu. Nowe komentarze mają status
+    "pending" i pojawiają się publicznie dopiero po zatwierdzeniu przez administratora.
+    Zamiast adresu IP przechowujemy jego HMAC (voter_hash) — wystarcza do wykrywania
+    spamu, a nie jest daną osobową w surowej postaci.
+    """
+
+    __tablename__ = "comments"
+    __table_args__ = (
+        db.CheckConstraint(
+            "(recipe_id IS NULL) <> (blog_post_id IS NULL)", name="ck_comments_one_target"
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    recipe_id = db.Column(db.Integer, db.ForeignKey("recipes.id", ondelete="CASCADE"), index=True)
+    blog_post_id = db.Column(db.Integer, db.ForeignKey("blog_posts.id", ondelete="CASCADE"), index=True)
+    author_name = db.Column(db.String(COMMENT_NAME_MAX), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="pending", index=True)
+    voter_hash = db.Column(db.String(64))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    recipe = db.relationship(
+        "Recipe",
+        backref=db.backref("comments", cascade="all, delete-orphan", passive_deletes=True),
+    )
+    blog_post = db.relationship(
+        "BlogPost",
+        backref=db.backref("comments", cascade="all, delete-orphan", passive_deletes=True),
+    )
+
+    @property
+    def target_title(self):
+        return self.recipe.title if self.recipe else (self.blog_post.title if self.blog_post else "")
+
+    @property
+    def status_display(self):
+        return COMMENT_STATUSES.get(self.status, self.status)
+
+    def __repr__(self):
+        return f"<Comment {self.id} by {self.author_name}>"
+
+
+class RecipeRating(db.Model):
+    """
+    Ocena przepisu w skali 1–5. Jeden głos na osobę: osobę rozpoznajemy po losowym
+    identyfikatorze z ciasteczka (przechowywanym jako HMAC). Ponowny głos z tego samego
+    urządzenia zmienia wcześniejszą ocenę zamiast dodawać nową.
+    """
+
+    __tablename__ = "recipe_ratings"
+    __table_args__ = (
+        db.UniqueConstraint("recipe_id", "voter_hash", name="uq_recipe_ratings_voter"),
+        db.CheckConstraint("score BETWEEN 1 AND 5", name="ck_recipe_ratings_score"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    recipe_id = db.Column(
+        db.Integer, db.ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    score = db.Column(db.Integer, nullable=False)
+    voter_hash = db.Column(db.String(64), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    recipe = db.relationship(
+        "Recipe",
+        backref=db.backref("ratings", cascade="all, delete-orphan", passive_deletes=True),
+    )
+
+    def __repr__(self):
+        return f"<RecipeRating recipe={self.recipe_id} score={self.score}>"
+
+
+class DailyView(db.Model):
+    """
+    Licznik wyświetleń strony przepisu / wpisu na blogu w danym dniu — własne, proste
+    statystyki bez zewnętrznej analityki (bez ciasteczek śledzących i bez baneru RODO).
+    Nie zapisujemy, KTO oglądał — tylko ile razy.
+    """
+
+    __tablename__ = "daily_views"
+    __table_args__ = (db.UniqueConstraint("kind", "object_id", "day", name="uq_daily_views"),)
+
+    KINDS = ("recipe", "blog")
+
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.String(10), nullable=False)
+    object_id = db.Column(db.Integer, nullable=False)
+    day = db.Column(db.Date, nullable=False, index=True)
+    views = db.Column(db.Integer, nullable=False, default=0)

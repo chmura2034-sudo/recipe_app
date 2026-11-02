@@ -129,3 +129,53 @@
     });
   }
 })();
+
+// ---------- znaczek ♥ na kartach przepisów, które są w ulubionych ----------
+(function () {
+  "use strict";
+  if (!window.RecipeStore) return;
+  var favorites = window.RecipeStore.getFavorites();
+  document.querySelectorAll(".recipe-card[data-recipe-slug]").forEach(function (card) {
+    if (favorites.indexOf(card.getAttribute("data-recipe-slug")) >= 0) card.classList.add("is-favorite");
+  });
+})();
+
+// ---------- PWA: service worker, przycisk instalacji, informacja o braku sieci ----------
+(function () {
+  "use strict";
+  // Service worker działa tylko w bezpiecznym kontekście (HTTPS albo localhost).
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("/sw.js").catch(function () { /* PWA niedostępne — strona działa normalnie */ });
+    });
+  }
+
+  var installButton = document.querySelector("[data-install-app]");
+  var deferredPrompt = null;
+  window.addEventListener("beforeinstallprompt", function (event) {
+    event.preventDefault(); // pokażemy własny przycisk zamiast domyślnego paska
+    deferredPrompt = event;
+    if (installButton) installButton.hidden = false;
+  });
+  if (installButton) {
+    installButton.addEventListener("click", function () {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.finally(function () {
+        deferredPrompt = null;
+        installButton.hidden = true;
+      });
+    });
+  }
+  window.addEventListener("appinstalled", function () {
+    if (installButton) installButton.hidden = true;
+  });
+
+  var banner = document.querySelector("[data-offline-banner]");
+  function updateOnline() {
+    if (banner) banner.hidden = navigator.onLine;
+  }
+  window.addEventListener("online", updateOnline);
+  window.addEventListener("offline", updateOnline);
+  updateOnline();
+})();

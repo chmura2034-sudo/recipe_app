@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Lista zakupów – Szczypta Smaku{% endblock %}
+
+{% block content %}
+  <h1>🛒 Lista zakupów</h1>
+  <p class="muted-info">
+    Lista jest zapisana tylko w tej przeglądarce. Składniki z kilku przepisów są sumowane
+    (o ile mają tę samą nazwę i jednostkę).
+  </p>
+
+  <noscript><p class="empty-state">Lista zakupów wymaga włączonego JavaScriptu.</p></noscript>
+
+  <div id="shoppingApp" hidden>
+    <p class="empty-state" data-shopping-empty>
+      Lista jest pusta. Otwórz przepis i kliknij „🛒 Dodaj do listy zakupów”.
+    </p>
+
+    <div data-shopping-content>
+      <div class="shopping-toolbar">
+        <button type="button" class="btn btn-small" data-shopping-copy>📋 Kopiuj listę</button>
+        <button type="button" class="btn btn-small btn-secondary" data-shopping-clear-checked>Usuń kupione</button>
+        <button type="button" class="btn btn-small btn-danger" data-shopping-clear-all>Wyczyść wszystko</button>
+        <span class="shopping-copy-status" data-shopping-copy-status role="status"></span>
+      </div>
+
+      <ul class="shopping-items" data-shopping-items></ul>
+
+      <h2>Przepisy na liście</h2>
+      <ul class="shopping-recipes" data-shopping-recipes></ul>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/shopping.js') }}" defer></script>
+{% endblock %}
