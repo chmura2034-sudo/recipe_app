@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ "Nowy wpis" if is_new else "Edytuj wpis" }} – Blog – Szczypta Smaku{% endblock %}
+
+{% block content %}
+  <a class="back-link" href="{{ cancel_url }}">&larr; Wróć</a>
+
+  <div class="form-page form-page-wide">
+    <h1>{{ "Nowy wpis na blogu" if is_new else "Edytuj wpis" }}</h1>
+
+    {% if editor_mode %}
+      <p class="editor-mode-notice">
+        ✏️ Jesteś zalogowany jako redaktor. Ten wpis
+        {{ "zostanie wysłany" if is_new else "zostanie ponownie wysłany" }}
+        do zatwierdzenia przez administratora i pojawi się publicznie dopiero po akceptacji.
+      </p>
+    {% endif %}
+
+    {% if post and post.status == "rejected" and post.rejection_reason %}
+      <div class="rejection-notice">
+        <strong>Ten wpis został odrzucony przez administratora.</strong>
+        <p>Powód: {{ post.rejection_reason }}</p>
+        <p>Popraw wpis i zapisz — trafi ponownie do kolejki zatwierdzania.</p>
+      </div>
+    {% endif %}
+
+    <form method="post" class="styled-form" enctype="multipart/form-data" action="{{ form_action }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <label for="title">Tytuł *</label>
+      <input type="text" id="title" name="title" maxlength="150" required value="{{ post.title if post and post.title else '' }}">
+
+      <label for="excerpt">Zajawka (krótki opis na liście wpisów)</label>
+      <input type="text" id="excerpt" name="excerpt" maxlength="300" value="{{ post.excerpt if post and post.excerpt else '' }}">
+
+      <label for="image">Zdjęcie główne (okładka)</label>
+      {% if post and post.image_url %}
+        <img class="image-preview" src="{{ post.image_url }}" alt="Aktualne zdjęcie wpisu">
+        <label class="checkbox-label">
+          <input type="checkbox" name="remove_image" value="1"> Usuń obecne zdjęcie
+        </label>
+      {% endif %}
+      <input type="file" id="image" name="image" accept="image/png,image/jpeg,image/gif,image/webp">
+
+      <label for="content">Treść *</label>
+      <div class="blog-editor" data-blog-editor
+           data-upload-url="{{ url_for('blog_upload_images') }}"
+           data-preview-url="{{ url_for('blog_preview') }}">
+        <div class="editor-toolbar" role="toolbar" aria-label="Formatowanie treści">
+          <span class="editor-tabs">
+            <button type="button" class="editor-tab editor-tab-active" data-action="write">Edycja</button>
+            <button type="button" class="editor-tab" data-action="preview">Podgląd</button>
+          </span>
+          <span class="editor-buttons">
+            <button type="button" data-action="bold" title="Pogrubienie (Ctrl+B)"><strong>B</strong></button>
+            <button type="button" data-action="italic" title="Kursywa (Ctrl+I)"><em>I</em></button>
+            <button type="button" data-action="h2" title="Nagłówek">H2</button>
+            <button type="button" data-action="h3" title="Podtytuł">H3</button>
+            <button type="button" data-action="ul" title="Lista punktowana">• Lista</button>
+            <button type="button" data-action="ol" title="Lista numerowana">1. Lista</button>
+            <button type="button" data-action="quote" title="Cytat">❝ Cytat</button>
+            <button type="button" data-action="link" title="Link (Ctrl+K)">🔗 Link</button>
+            <button type="button" data-action="hr" title="Linia oddzielająca">―</button>
+            <button type="button" data-action="image" title="Wstaw zdjęcia (można wybrać kilka)">📷 Zdjęcia</button>
+          </span>
+        </div>
+        <div data-write-pane>
+          <textarea id="content" name="content" rows="20" required
+                    placeholder="Pisz tutaj… Zdjęcia możesz też przeciągnąć albo wkleić (Ctrl+V) prosto do tekstu.">{{ post.content if post and post.content else '' }}</textarea>
+        </div>
+        <div class="blog-content editor-preview" data-preview style="display:none;"></div>
+        <input type="file" data-image-input accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+        <p class="editor-status" data-editor-status aria-live="polite"></p>
+      </div>
+      <details class="field-hint editor-help">
+        <summary>Ściąga formatowania</summary>
+        <code>**pogrubienie**</code>, <code>*kursywa*</code>, <code>## Nagłówek</code>,
+        <code>- punkt listy</code>, <code>1. punkt</code>, <code>&gt; cytat</code>,
+        <code>[tekst](https://adres)</code>, <code>---</code> (linia).
+        Akapity oddziel pustą linią. Zdjęcia wstawiają się jako <code>![opis](adres)</code> —
+        tekst „opis” możesz zmienić, a całą linię przesunąć w inne miejsce.
+      </details>
+
+      <button type="submit" class="btn">{{ "Dodaj wpis" if is_new else "Zapisz zmiany" }}</button>
+    </form>
+  </div>
+  <script src="{{ url_for('static', filename='js/blog_editor.js') }}" defer></script>
+{% endblock %}

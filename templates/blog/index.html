@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Blog – Szczypta Smaku{% endblock %}
+
+{% block content %}
+  <h1>Blog</h1>
+
+  {% if posts %}
+    <div class="blog-list">
+      {% for post in posts %}
+        <a class="blog-card" href="{{ url_for('blog_detail', slug=post.slug) }}">
+          {% if post.image_url %}
+            <img src="{{ post.image_url }}" alt="{{ post.title }}">
+          {% endif %}
+          <div class="blog-card-body">
+            <h2>{{ post.title }}</h2>
+            <p class="blog-meta">
+              {{ post.published_at.strftime('%d.%m.%Y') if post.published_at else '' }}
+              {% if post.author %}· {{ post.author.username }}{% endif %}
+            </p>
+            {% if post.summary %}<p>{{ post.summary | truncate(220) }}</p>{% endif %}
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="empty-state">Na blogu nie ma jeszcze żadnych wpisów.</p>
+  {% endif %}
+{% endblock %}

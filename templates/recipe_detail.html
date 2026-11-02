@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ recipe.title }} – Wielka Księga Przepisów{% endblock %}
+{% block title %}{{ recipe.title }} – Szczypta Smaku{% endblock %}
 
 {% block content %}
   <a class="back-link" href="{{ url_for('index') }}">&larr; Wróć do listy przepisów</a>
@@ -36,6 +36,15 @@
         {% endfor %}
       </div>
     {% endif %}
+
+    {# Widoczne tylko na telefonach/tabletach (pokazuje app.js) — przydatne podczas gotowania. #}
+    <button type="button" class="wake-lock-toggle" data-wake-lock aria-pressed="false" hidden>
+      <span class="wake-lock-switch" aria-hidden="true"></span>
+      <span>
+        <strong>Nie wygaszaj ekranu</strong>
+        <span class="wake-lock-hint" data-wake-lock-hint>Ekran nie zgaśnie, dopóki ten przepis jest otwarty.</span>
+      </span>
+    </button>
 
     {% set has_servings = recipe.servings %}
     {% set has_pan = recipe.pan_shape and (recipe.pan_size_cm or (recipe.pan_width_cm and recipe.pan_length_cm)) %}

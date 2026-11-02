@@ -1,0 +1,36 @@
+# --- Treść serwisu (przepisy, wpisy na blogu, konta) — NIE wysyłamy do repozytorium ---
+# Baza SQLite z przepisami, wpisami na blogu i kontami użytkowników (z hashami haseł).
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Zdjęcia przepisów i wpisów wgrane przez użytkowników.
+# Sam katalog zostaje w repozytorium dzięki pustemu plikowi .gitkeep.
+static/uploads/*
+!static/uploads/.gitkeep
+
+# Kopie zapasowe eksportowane z panelu / komendą `flask export-backup`.
+kopia-przepisow-*.zip
+backups/
+
+# --- Sekrety i konfiguracja lokalna ---
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# --- Edytory / system ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,5 +1,7 @@
 from datetime import datetime
 
+import markdown
+import nh3
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -276,3 +278,109 @@ class Tag(db.Model):
 
     def __repr__(self):
         return f"<Tag {self.name}>"
+
+
+
+# ---------- treść bloga: Markdown -> bezpieczny HTML ----------
+# Tylko te znaczniki i atrybuty mogą trafić na stronę. Wszystko inne (np. <script>,
+# onclick=, style=, <iframe>) jest usuwane przez nh3 PO wyrenderowaniu Markdownu,
+# więc nawet surowy HTML wpisany w treść wpisu nie wykona się w przeglądarce.
+BLOG_ALLOWED_TAGS = {
+    "p", "br", "strong", "em", "del", "h2", "h3", "h4", "ul", "ol", "li",
+    "blockquote", "a", "img", "hr", "code", "pre",
+}
+BLOG_ALLOWED_ATTRIBUTES = {"a": {"href", "title"}, "img": {"src", "alt", "title"}}
+# Zdjęcia we wpisach mogą pochodzić wyłącznie z naszego katalogu uploadów
+# (i tak wymusza to CSP img-src 'self', ale nie zostawiamy martwych znaczników).
+BLOG_IMAGE_PREFIX = "/static/uploads/"
+
+
+def _blog_attribute_filter(element, attribute, value):
+    if element == "img" and attribute == "src" and not value.startswith(BLOG_IMAGE_PREFIX):
+        return None
+    return value
+
+
+def render_blog_markdown(text: str) -> str:
+    """Zamienia Markdown wpisu na oczyszczony HTML (bezpieczny do wstawienia przez |safe)."""
+    raw_html = markdown.markdown(text or "", extensions=["nl2br", "sane_lists"], output_format="html")
+    return nh3.clean(
+        raw_html,
+        tags=BLOG_ALLOWED_TAGS,
+        attributes=BLOG_ALLOWED_ATTRIBUTES,
+        url_schemes={"http", "https", "mailto"},
+        link_rel="noopener noreferrer nofollow",
+        attribute_filter=_blog_attribute_filter,
+    )
+
+
+def blog_markdown_to_plain_text(text: str) -> str:
+    """Treść wpisu bez formatowania (np. do automatycznej zajawki na liście wpisów)."""
+    html = render_blog_markdown(text).replace("</p>", " </p>").replace("<br>", " ")
+    plain = nh3.clean(html, tags=set())
+    # nh3 zostawia encje HTML (&amp; itp.) — Jinja i tak escapuje tekst, więc je odkodowujemy.
+    from html import unescape
+
+    return " ".join(unescape(plain).split())
+
+
+class BlogPost(db.Model):
+    """
+    Wpis na blogu. Podlega temu samemu cyklowi redakcyjnemu co przepisy:
+    wpisy administratora są publikowane od razu, wpisy redaktora czekają
+    na zatwierdzenie (statusy z RECIPE_STATUSES).
+
+    Treść zapisywana jest w Markdownie (pogrubienia, nagłówki, listy, linki, zdjęcia).
+    Na stronę trafia wyłącznie przez render_blog_markdown(), który usuwa wszelki
+    niedozwolony HTML — wpis nie może wstrzyknąć skryptu do strony.
+    """
+
+    __tablename__ = "blog_posts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(150), nullable=False)
+    slug = db.Column(db.String(180), unique=True, nullable=False, index=True)
+    excerpt = db.Column(db.String(300))
+    content = db.Column(db.Text, nullable=False)
+    image_url = db.Column(db.String(500))
+
+    status = db.Column(db.String(20), nullable=False, default="published")
+    rejection_reason = db.Column(db.Text)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Data pierwszej publikacji — według niej sortujemy listę wpisów na blogu.
+    published_at = db.Column(db.DateTime, index=True)
+
+    author_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    author = db.relationship("User", backref="blog_posts")
+
+    @property
+    def content_html(self):
+        """Treść wyrenderowana z Markdownu i oczyszczona — bezpieczna do wyświetlenia."""
+        return render_blog_markdown(self.content)
+
+    @property
+    def summary(self):
+        """Zajawka podana przez autora albo początek treści bez formatowania."""
+        if self.excerpt:
+            return self.excerpt
+        return blog_markdown_to_plain_text(self.content)
+
+    @property
+    def status_display(self):
+        return RECIPE_STATUSES.get(self.status, self.status)
+
+    @property
+    def is_published(self):
+        return self.status == "published"
+
+    def publish(self):
+        """Oznacza wpis jako opublikowany (data publikacji ustawiana tylko za pierwszym razem)."""
+        self.status = "published"
+        self.rejection_reason = None
+        if self.published_at is None:
+            self.published_at = datetime.utcnow()
+
+    def __repr__(self):
+        return f"<BlogPost {self.title}>"

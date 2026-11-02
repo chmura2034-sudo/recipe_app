@@ -3,18 +3,36 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Wielka Księga Przepisów{% endblock %}</title>
+  <meta name="theme-color" content="#a3461f">
+  <title>{% block title %}Szczypta Smaku{% endblock %}</title>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+  <script nonce="{{ csp_nonce }}">
+    // Ustawia motyw PRZED narysowaniem strony (bez „mignięcia" jasnego tła).
+    // Zapisany wybór ma pierwszeństwo, w przeciwnym razie motyw systemowy.
+    (function () {
+      var pref = null;
+      try { pref = localStorage.getItem("theme"); } catch (e) {}
+      var dark = pref === "dark" || (pref !== "light" && window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    })();
+  </script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="{{ url_for('index') }}">
-      <img src="{{ url_for('static', filename='logo.png') }}" alt="Wielka Księga Przepisów" class="brand-logo">
-      <span>Wielka Księga Przepisów</span>
+      <img src="{{ url_for('static', filename='logo.png') }}" alt="" class="brand-logo">
+      <span class="brand-text">
+        <span class="brand-name">Szczypta Smaku</span>
+        <span class="brand-tagline">Przepisy · Blog kulinarny</span>
+      </span>
     </a>
     <nav>
+      {% set ep = request.endpoint or '' %}
+      <a href="{{ url_for('index') }}" class="{{ 'nav-active' if ep in ('index', 'recipe_detail') else '' }}">Przepisy</a>
+      <a href="{{ url_for('blog_index') }}" class="{{ 'nav-active' if ep in ('blog_index', 'blog_detail') else '' }}">Blog</a>
       {% if current_user.is_authenticated %}
         {% if current_user.is_admin %}
           <a href="{{ url_for('admin_dashboard') }}">Panel administratora</a>
@@ -29,6 +47,9 @@
       {% else %}
         <a href="{{ url_for('login') }}">Zaloguj się</a>
       {% endif %}
+      {# Przycisk pokazuje app.js — bez JavaScriptu i tak nie dałoby się zmienić motywu. #}
+      <button type="button" class="theme-toggle" data-theme-toggle hidden
+              aria-label="Zmień motyw" title="Zmień motyw">🌓</button>
     </nav>
   </header>
 
@@ -47,7 +68,10 @@
   </main>
 
   <footer class="footer">
-    <p>&copy; {{ 2026 }} Wielka Księga Przepisów</p>
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="" class="footer-logo">
+    <p class="footer-name">Szczypta Smaku</p>
+    <p class="footer-tagline">Przepisy · Blog kulinarny</p>
+    <p>&copy; 2026 Szczypta Smaku</p>
   </footer>
 </body>
 </html>

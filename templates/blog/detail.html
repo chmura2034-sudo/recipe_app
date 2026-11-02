@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ post.title }} – Blog – Szczypta Smaku{% endblock %}
+
+{% block content %}
+  <a class="back-link" href="{{ url_for('blog_index') }}">&larr; Wszystkie wpisy</a>
+
+  <article class="blog-post">
+    {% if post.status != "published" %}
+      <p class="editor-mode-notice">
+        Ten wpis nie jest publiczny (status: {{ post.status_display }}). Widzisz go jako autor lub administrator.
+      </p>
+    {% endif %}
+
+    <h1>{{ post.title }}</h1>
+    <p class="blog-meta">
+      {{ post.published_at.strftime('%d.%m.%Y') if post.published_at else post.created_at.strftime('%d.%m.%Y') }}
+      {% if post.author %}· {{ post.author.username }}{% endif %}
+    </p>
+
+    {% if post.image_url %}
+      <img class="recipe-detail-img" src="{{ post.image_url }}" alt="{{ post.title }}">
+    {% endif %}
+
+    {% if post.excerpt %}<p class="recipe-description">{{ post.excerpt }}</p>{% endif %}
+
+    <div class="blog-content">
+      {# content_html jest oczyszczony przez nh3 (models.render_blog_markdown) — dlatego |safe. #}
+      {{ post.content_html | safe }}
+    </div>
+
+    {% if current_user.is_authenticated and current_user.is_admin %}
+      <div class="admin-actions">
+        <a class="btn btn-small" href="{{ url_for('blog_edit', post_id=post.id) }}">Edytuj wpis</a>
+      </div>
+    {% elif current_user.is_authenticated and post.author_id == current_user.id %}
+      <div class="admin-actions">
+        <a class="btn btn-small" href="{{ url_for('redaktor_blog_edit', post_id=post.id) }}">Edytuj wpis</a>
+      </div>
+    {% endif %}
+  </article>
+{% endblock %}

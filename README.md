@@ -1,4 +1,4 @@
-# Wielka Księga Przepisów (Flask)
+# Szczypta Smaku — przepisy i blog kulinarny (Flask)
 
 Prosta aplikacja webowa do publikowania przepisów kulinarnych.
 Każdy odwiedzający może przeglądać i wyszukiwać przepisy. Treść dodają **administrator**

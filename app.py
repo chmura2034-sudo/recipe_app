@@ -33,7 +33,19 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from config import get_config, validate_production_config
-from models import INGREDIENT_UNITS, PAN_SHAPES, RECIPE_STATUSES, ROLES, Recipe, Tag, User, db, recipe_tags
+from models import (
+    INGREDIENT_UNITS,
+    PAN_SHAPES,
+    RECIPE_STATUSES,
+    ROLES,
+    BlogPost,
+    Recipe,
+    Tag,
+    User,
+    db,
+    recipe_tags,
+    render_blog_markdown,
+)
 
 login_manager = LoginManager()
 login_manager.login_view = "login"
@@ -455,7 +467,13 @@ def create_app(config_class=None):
         status_priority = {"pending": 0, "rejected": 1, "published": 2}
         recipes.sort(key=lambda r: status_priority.get(r.status, 3))
         pending_count = sum(1 for r in recipes if r.status == "pending")
-        return render_template("admin/dashboard.html", recipes=recipes, pending_count=pending_count)
+        blog_pending_count = BlogPost.query.filter_by(status="pending").count()
+        return render_template(
+            "admin/dashboard.html",
+            recipes=recipes,
+            pending_count=pending_count,
+            blog_pending_count=blog_pending_count,
+        )
 
     @app.route("/admin/przepis/nowy", methods=["GET", "POST"])
     @login_required
@@ -612,6 +630,7 @@ def create_app(config_class=None):
             abort(403)
         # Przepisy usuwanego redaktora zostają, ale tracą powiązanie z autorem.
         Recipe.query.filter_by(author_id=user.id).update({"author_id": None})
+        BlogPost.query.filter_by(author_id=user.id).update({"author_id": None})
         db.session.delete(user)
         db.session.commit()
         flash(f"Usunięto konto redaktora: {user.username}.", "success")
@@ -625,7 +644,10 @@ def create_app(config_class=None):
         recipes = (
             Recipe.query.filter_by(author_id=current_user.id).order_by(Recipe.created_at.desc()).all()
         )
-        return render_template("redaktor/dashboard.html", recipes=recipes)
+        posts = (
+            BlogPost.query.filter_by(author_id=current_user.id).order_by(BlogPost.created_at.desc()).all()
+        )
+        return render_template("redaktor/dashboard.html", recipes=recipes, posts=posts)
 
     @app.route("/redakcja/przepis/nowy", methods=["GET", "POST"])
     @login_required
@@ -690,6 +712,228 @@ def create_app(config_class=None):
         db.session.commit()
         flash("Przepis został usunięty.", "success")
         return redirect(url_for("redaktor_dashboard"))
+
+    # ---------- blog: widoki publiczne ----------
+    @app.route("/blog")
+    def blog_index():
+        posts = (
+            BlogPost.query.filter_by(status="published")
+            .order_by(BlogPost.published_at.desc(), BlogPost.id.desc())
+            .all()
+        )
+        return render_template("blog/index.html", posts=posts)
+
+    @app.route("/blog/<slug>")
+    def blog_detail(slug):
+        post = BlogPost.query.filter_by(slug=slug).first_or_404()
+        if post.status != "published":
+            # Niezatwierdzony wpis widzi tylko jego autor albo administrator.
+            is_owner = current_user.is_authenticated and post.author_id == current_user.id
+            is_admin_viewer = current_user.is_authenticated and current_user.is_admin
+            if not (is_owner or is_admin_viewer):
+                abort(404)
+        return render_template("blog/detail.html", post=post)
+
+    # ---------- blog: panel administratora ----------
+    @app.route("/admin/blog")
+    @login_required
+    @admin_required
+    def admin_blog():
+        posts = BlogPost.query.order_by(BlogPost.created_at.desc()).all()
+        status_priority = {"pending": 0, "rejected": 1, "published": 2}
+        posts.sort(key=lambda p: status_priority.get(p.status, 3))
+        return render_template("admin/blog.html", posts=posts)
+
+    @app.route("/admin/blog/nowy", methods=["GET", "POST"])
+    @login_required
+    @admin_required
+    def blog_create():
+        post = None
+        if request.method == "POST":
+            post = BlogPost(author_id=current_user.id)
+            if _save_blog_form(post):
+                post.publish()
+                db.session.add(post)
+                db.session.commit()
+                flash("Wpis został opublikowany.", "success")
+                return redirect(url_for("admin_blog"))
+        return _render_blog_form(post, "blog_create", "admin_blog", editor_mode=False, is_new=True)
+
+    @app.route("/admin/blog/<int:post_id>/edytuj", methods=["GET", "POST"])
+    @login_required
+    @admin_required
+    def blog_edit(post_id):
+        post = db.session.get(BlogPost, post_id) or abort(404)
+        if request.method == "POST":
+            if _save_blog_form(post):
+                # Admin zapisujący formularz automatycznie zatwierdza wpis (jak przy przepisach).
+                post.publish()
+                db.session.commit()
+                flash("Wpis został zaktualizowany i opublikowany.", "success")
+                return redirect(url_for("admin_blog"))
+            # Bez commita: niezapisane zmiany przepadną przy zamknięciu sesji, a formularz
+            # pokaże wpisany przez autora tekst razem z komunikatem błędu.
+        return _render_blog_form(post, "blog_edit", "admin_blog", editor_mode=False, is_new=False)
+
+    @app.route("/admin/blog/<int:post_id>/usun", methods=["POST"])
+    @login_required
+    @admin_required
+    def blog_delete(post_id):
+        post = db.session.get(BlogPost, post_id) or abort(404)
+        db.session.delete(post)
+        db.session.commit()
+        flash("Wpis został usunięty.", "success")
+        return redirect(url_for("admin_blog"))
+
+    @app.route("/admin/blog/<int:post_id>/zatwierdz", methods=["POST"])
+    @login_required
+    @admin_required
+    def blog_approve(post_id):
+        post = db.session.get(BlogPost, post_id) or abort(404)
+        post.publish()
+        db.session.commit()
+        flash(f"Wpis „{post.title}” został opublikowany.", "success")
+        return redirect(url_for("admin_blog"))
+
+    @app.route("/admin/blog/<int:post_id>/odrzuc", methods=["POST"])
+    @login_required
+    @admin_required
+    def blog_reject(post_id):
+        post = db.session.get(BlogPost, post_id) or abort(404)
+        post.status = "rejected"
+        post.rejection_reason = request.form.get("reason", "").strip() or None
+        db.session.commit()
+        flash(f"Wpis „{post.title}” został odrzucony.", "success")
+        return redirect(url_for("admin_blog"))
+
+    # ---------- blog: panel redaktora (wpisy wymagają zatwierdzenia) ----------
+    @app.route("/redakcja/blog/nowy", methods=["GET", "POST"])
+    @login_required
+    @redaktor_or_admin_required
+    def redaktor_blog_create():
+        post = None
+        if request.method == "POST":
+            post = BlogPost(author_id=current_user.id, status="pending")
+            if _save_blog_form(post):
+                db.session.add(post)
+                db.session.commit()
+                flash("Wpis został wysłany do zatwierdzenia przez administratora.", "success")
+                return redirect(url_for("redaktor_dashboard"))
+        return _render_blog_form(post, "redaktor_blog_create", "redaktor_dashboard", editor_mode=True, is_new=True)
+
+    @app.route("/redakcja/blog/<int:post_id>/edytuj", methods=["GET", "POST"])
+    @login_required
+    @redaktor_or_admin_required
+    def redaktor_blog_edit(post_id):
+        post = db.session.get(BlogPost, post_id) or abort(404)
+        if post.author_id != current_user.id and not current_user.is_admin:
+            abort(403)
+        if request.method == "POST":
+            if _save_blog_form(post):
+                # Każda zmiana redaktora wraca do kolejki zatwierdzania.
+                post.status = "pending"
+                post.rejection_reason = None
+                db.session.commit()
+                flash("Zmiany we wpisie zostały wysłane do ponownego zatwierdzenia.", "success")
+                return redirect(url_for("redaktor_dashboard"))
+        return _render_blog_form(post, "redaktor_blog_edit", "redaktor_dashboard", editor_mode=True, is_new=False)
+
+    @app.route("/redakcja/blog/<int:post_id>/usun", methods=["POST"])
+    @login_required
+    @redaktor_or_admin_required
+    def redaktor_blog_delete(post_id):
+        post = db.session.get(BlogPost, post_id) or abort(404)
+        if post.author_id != current_user.id and not current_user.is_admin:
+            abort(403)
+        if post.status == "published" and not current_user.is_admin:
+            flash("Opublikowany wpis może usunąć tylko administrator.", "error")
+            return redirect(url_for("redaktor_dashboard"))
+        db.session.delete(post)
+        db.session.commit()
+        flash("Wpis został usunięty.", "success")
+        return redirect(url_for("redaktor_dashboard"))
+
+    # ---------- blog: zdjęcia w treści i podgląd (wywoływane przez edytor JS) ----------
+    BLOG_MAX_IMAGES_PER_UPLOAD = 10
+
+    @app.route("/redakcja/blog/zdjecia", methods=["POST"])
+    @login_required
+    @redaktor_or_admin_required
+    def blog_upload_images():
+        """Przyjmuje jedno lub kilka zdjęć naraz, zwraca ich adresy do wstawienia w treść.
+        Token CSRF przychodzi w nagłówku X-CSRFToken (Flask-WTF sprawdza go automatycznie)."""
+        files = [f for f in request.files.getlist("images") if f and f.filename]
+        if not files:
+            return jsonify(error="Nie wybrano żadnego zdjęcia."), 400
+        if len(files) > BLOG_MAX_IMAGES_PER_UPLOAD:
+            return jsonify(error=f"Naraz można wysłać najwyżej {BLOG_MAX_IMAGES_PER_UPLOAD} zdjęć."), 400
+
+        images, errors = [], []
+        for file in files:
+            filename, error = _sanitize_and_save_image(file.read())
+            if error:
+                errors.append(f"{file.filename[:80]}: {error}")
+                continue
+            alt = os.path.splitext(file.filename)[0][:80]
+            images.append({"url": url_for("static", filename=f"uploads/{filename}"), "alt": alt})
+        app.logger.info("Użytkownik %r wgrał %s zdjęć do bloga", current_user.username, len(images))
+        return jsonify(images=images, errors=errors), (200 if images else 400)
+
+    @app.route("/redakcja/blog/podglad", methods=["POST"])
+    @login_required
+    @redaktor_or_admin_required
+    def blog_preview():
+        data = request.get_json(silent=True) or {}
+        content = data.get("content")
+        if not isinstance(content, str):
+            return jsonify(error="Brak treści."), 400
+        return jsonify(html=render_blog_markdown(content[:200_000]))
+
+    def _render_blog_form(post, action_endpoint, cancel_endpoint, editor_mode, is_new):
+        # Po nieudanej walidacji nowego wpisu `post` jest niezapisanym obiektem z danymi
+        # z formularza — pokazujemy je ponownie, żeby autor nie stracił tekstu.
+        form_action = (
+            url_for(action_endpoint) if is_new else url_for(action_endpoint, post_id=post.id)
+        )
+        return render_template(
+            "admin/blog_form.html",
+            post=post,
+            is_new=is_new,
+            form_action=form_action,
+            cancel_url=url_for(cancel_endpoint),
+            editor_mode=editor_mode,
+        )
+
+    def _save_blog_form(post: BlogPost) -> bool:
+        """Przepisuje dane z formularza do wpisu. Zwraca False (z komunikatem flash), gdy
+        brakuje wymaganych pól — wtedy wywołujący nie zapisuje zmian."""
+        title = request.form.get("title", "").strip()[:150]
+        content = request.form.get("content", "").strip()
+        post.title = title
+        post.excerpt = request.form.get("excerpt", "").strip()[:300] or None
+        post.content = content
+        if not title or not content:
+            flash("Podaj tytuł i treść wpisu.", "error")
+            return False
+
+        with db.session.no_autoflush:
+            base_slug = slugify(title) or "wpis"
+            if post.slug != base_slug:
+                candidate = base_slug
+                counter = 2
+                while BlogPost.query.filter(
+                    BlogPost.slug == candidate, BlogPost.id != (post.id or -1)
+                ).first():
+                    candidate = f"{base_slug}-{counter}"
+                    counter += 1
+                post.slug = candidate
+
+        new_image_url = _save_uploaded_image()
+        if new_image_url:
+            post.image_url = new_image_url
+        elif request.form.get("remove_image") == "1":
+            post.image_url = None
+        return True
 
     # ---------- kopia zapasowa (eksport / import) ----------
     @app.route("/admin/kopia-zapasowa")

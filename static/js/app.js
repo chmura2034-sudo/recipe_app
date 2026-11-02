@@ -27,4 +27,105 @@
     if (!target) return;
     target.style.display = target.style.display === "none" ? "flex" : "none";
   });
+
+  // ---------- przełącznik motywu: automatyczny (systemowy) -> jasny -> ciemny ----------
+  var THEME_ICONS = { auto: "🌓", light: "☀️", dark: "🌙" };
+  var THEME_NAMES = { auto: "automatyczny (jak w systemie)", light: "jasny", dark: "ciemny" };
+  var themeButton = document.querySelector("[data-theme-toggle]");
+  var systemDark = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+
+  function storedThemePref() {
+    try {
+      var value = localStorage.getItem("theme");
+      return value === "light" || value === "dark" ? value : "auto";
+    } catch (e) { return "auto"; }
+  }
+
+  function applyTheme(pref) {
+    var dark = pref === "dark" || (pref === "auto" && systemDark && systemDark.matches);
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", dark ? "#2a201a" : "#a3461f");
+    if (themeButton) {
+      var label = "Motyw: " + THEME_NAMES[pref] + " — kliknij, aby zmienić";
+      themeButton.textContent = THEME_ICONS[pref];
+      themeButton.setAttribute("title", label);
+      themeButton.setAttribute("aria-label", label);
+    }
+  }
+
+  if (themeButton) {
+    themeButton.hidden = false;
+    applyTheme(storedThemePref());
+    themeButton.addEventListener("click", function () {
+      var order = ["auto", "light", "dark"];
+      var next = order[(order.indexOf(storedThemePref()) + 1) % order.length];
+      try {
+        if (next === "auto") localStorage.removeItem("theme");
+        else localStorage.setItem("theme", next);
+      } catch (e) { /* tryb prywatny bez localStorage — motyw działa do odświeżenia */ }
+      applyTheme(next);
+    });
+  }
+  if (systemDark && systemDark.addEventListener) {
+    // W trybie automatycznym podążamy za zmianą motywu systemu (np. o zmroku).
+    systemDark.addEventListener("change", function () {
+      if (storedThemePref() === "auto") applyTheme("auto");
+    });
+  }
+
+  // ---------- „Nie wygaszaj ekranu" (Screen Wake Lock API) ----------
+  // Tylko na urządzeniach dotykowych (telefon/tablet), gdzie ekran gaśnie podczas gotowania.
+  var wakeButton = document.querySelector("[data-wake-lock]");
+  var isTouchDevice = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  if (wakeButton && isTouchDevice) {
+    var wakeHint = wakeButton.querySelector("[data-wake-lock-hint]");
+    var defaultHint = wakeHint.textContent;
+    var supported = "wakeLock" in navigator;
+    var wakeLock = null;
+    var wanted = false;
+
+    var setPressed = function (on) {
+      wakeButton.setAttribute("aria-pressed", on ? "true" : "false");
+    };
+
+    var requestLock = function () {
+      return navigator.wakeLock.request("screen").then(function (lock) {
+        wakeLock = lock;
+        setPressed(true);
+        wakeHint.textContent = defaultHint;
+        lock.addEventListener("release", function () {
+          wakeLock = null;
+          // Przeglądarka zwalnia blokadę po przejściu do innej karty/aplikacji —
+          // przycisk zostaje włączony, a blokada wraca po powrocie (visibilitychange).
+          if (!wanted) setPressed(false);
+        });
+      }).catch(function () {
+        wanted = false;
+        setPressed(false);
+        wakeHint.textContent = "Nie udało się włączyć (np. tryb oszczędzania baterii).";
+      });
+    };
+
+    wakeButton.hidden = false;
+    wakeButton.addEventListener("click", function () {
+      if (!supported) {
+        wakeHint.textContent = window.isSecureContext
+          ? "Ta przeglądarka nie obsługuje tej funkcji."
+          : "Ta funkcja działa tylko na stronie otwartej przez HTTPS.";
+        return;
+      }
+      wanted = !wanted;
+      if (wanted) {
+        requestLock();
+      } else {
+        setPressed(false);
+        if (wakeLock) wakeLock.release();
+      }
+    });
+
+    document.addEventListener("visibilitychange", function () {
+      if (wanted && !wakeLock && document.visibilityState === "visible") requestLock();
+    });
+  }
 })();
