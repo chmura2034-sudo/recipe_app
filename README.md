@@ -34,9 +34,8 @@ source venv/bin/activate        # Windows: venv\Scripts\activate
 # 2. Zainstaluj zależności
 pip install -r requirements.txt
 
-# 3. Skopiuj przykładową konfigurację i włącz tryb deweloperski
-cp .env.example .env
-# w .env ustaw: APP_ENV=development
+# 3. Utwórz plik .env i włącz tryb deweloperski
+echo "APP_ENV=development" > .env
 # (tryb development nie wymaga SECRET_KEY i działa po zwykłym http://;
 #  bez tego aplikacja domyślnie startuje w trybie PRODUCTION i odmówi
 #  uruchomienia bez poprawnego SECRET_KEY — patrz sekcja "Bezpieczeństwo")
@@ -61,8 +60,9 @@ jednowątkowy, bez obsługi wielu równoczesnych połączeń. Do wdrożenia patr
 
 ## Zmienne środowiskowe
 
-Pełna, opisana lista jest w pliku `.env.example` (skopiuj do `.env` — plik ten nie trafia
-do repozytorium, patrz `.gitignore`). Najważniejsze:
+Aplikacja czyta zmienne ze środowiska oraz z pliku `.env` w katalogu projektu
+(`python-dotenv`; zmienne ustawione w środowisku mają pierwszeństwo). Plik `.env` nie trafia
+do repozytorium (patrz `.gitignore`). Najważniejsze zmienne:
 
 | Zmienna                  | Opis                                                                 | Domyślnie (production) |
 |---------------------------|-----------------------------------------------------------------------|--------------------------|
@@ -86,13 +86,14 @@ recipe_app/
 ├── models.py                    # modele: User, Recipe, Tag (SQLAlchemy)
 ├── wsgi.py                       # punkt wejścia dla gunicorna
 ├── requirements.txt
-├── .env.example                  # szablon zmiennych środowiskowych (skopiuj do .env)
+├── .env                          # zmienne środowiskowe (tworzysz sam, poza repozytorium)
 ├── .gitignore
 ├── Dockerfile
 ├── docker-compose.yml.example
 ├── deploy/
 │   ├── nginx.conf.example        # reverse proxy + HTTPS
-│   └── recipe-app.service.example # jednostka systemd (gunicorn)
+│   ├── recipe-app.service.example # jednostka systemd (gunicorn)
+│   └── wireguard/                # tunel VPS1 (nginx) ↔ VPS2 (aplikacja), opcja C
 ├── migrations/                   # migracje Alembic (flask db upgrade)
 │   └── versions/
 ├── static/
@@ -255,81 +256,349 @@ Aplikacja zawiera kilka wbudowanych zabezpieczeń:
   złe hasło 5 razy — w takiej sytuacji odblokuj konto natychmiast poleceniem
   `flask unlock-user --username nazwa`, bez czekania na upływ `LOGIN_LOCKOUT_MINUTES`.
 
-## Wdrożenie produkcyjne
+## Wdrożenie produkcyjne (stawianie serwera)
 
-Projekt zawiera gotowe pliki do dwóch sposobów wdrożenia — wybierz jeden.
+Poniższa instrukcja zakłada świeży serwer z **Ubuntu 22.04/24.04 lub Debianem 12**, dostęp
+przez SSH na użytkownika z `sudo` oraz własną domenę (w przykładach: `twoja-domena.pl`).
+
+### Którą opcję wybrać?
+
+| Opcja | Kiedy | Co działa na serwerze |
+|-------|-------|------------------------|
+| **A. Docker** | najprościej, łatwe aktualizacje | kontener z gunicornem + nginx na hoście (HTTPS) |
+| **B. gunicorn + systemd** | klasyczny VPS bez Dockera | venv + usługa systemd + nginx (HTTPS) |
+| **C. Dwa serwery + WireGuard** | publiczny serwer brzegowy (VPS1) i ukryty backend (VPS2) | VPS1: nginx + HTTPS, VPS2: aplikacja (A lub B) dostępna tylko przez tunel |
+
+We wszystkich opcjach ruch z internetu trafia **najpierw do nginx** (HTTPS), który przekazuje
+go do gunicorna na porcie `8000`. Gunicorn nigdy nie powinien być dostępny bezpośrednio
+z internetu.
+
+```
+przeglądarka ──HTTPS:443──▶ nginx ──HTTP:8000──▶ gunicorn (wsgi:app) ──▶ SQLite + static/uploads
+```
+
+### Krok 1: Przygotowanie serwera (wszystkie opcje)
+
+```bash
+# Aktualizacja systemu i potrzebne pakiety
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y git nginx certbot ufw
+sudo apt install -y python3 python3-venv     # tylko opcja B (w opcji A Python jest w obrazie)
+
+# Zapora: SSH + HTTP/HTTPS (port 8000 NIE jest otwierany na zewnątrz)
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw enable
+```
+
+W panelu swojego rejestratora domen ustaw rekord **A** (i ewentualnie **AAAA**) domeny
+na publiczny adres IP serwera. Sprawdź, zanim przejdziesz dalej (certyfikat SSL bez tego
+się nie wystawi):
+
+```bash
+dig +short twoja-domena.pl     # powinno zwrócić IP serwera
+```
+
+### Krok 2: Kod aplikacji i plik `.env` (wszystkie opcje)
+
+```bash
+sudo git clone <adres-repozytorium> /opt/recipe-app
+sudo chown -R $USER:$USER /opt/recipe-app
+cd /opt/recipe-app
+
+# Wygeneruj klucz sesji (min. 32 znaki — bez niego aplikacja odmówi startu)
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Utwórz `/opt/recipe-app/.env` (np. `nano .env`) — minimalna konfiguracja produkcyjna:
+
+```ini
+APP_ENV=production
+SECRET_KEY=<wklej-wygenerowany-klucz>
+# Jeden nginx przed aplikacją = 1. Źle ustawione psuje limit logowań per IP i wykrywanie HTTPS.
+PROXY_COUNT=1
+# Tylko opcja B: baza w osobnym katalogu (patrz krok B3). W opcji A ustawia to docker-compose.
+DATABASE_URL=sqlite:////opt/recipe-app/data/recipes.db
+# Opcjonalnie: domyślny login dla `flask create-admin`
+ADMIN_USERNAME=admin
+```
+
+```bash
+chmod 600 .env     # w opcji B uprawnienia poprawimy w kroku B3
+```
+
+Pełna lista zmiennych — patrz sekcja „Zmienne środowiskowe” wyżej.
+
+### Krok 3: Certyfikat SSL (Let's Encrypt)
+
+Wystawiamy certyfikat **przed** skonfigurowaniem nginx, bo przykładowy `deploy/nginx.conf.example`
+odwołuje się do plików certyfikatu — bez nich `nginx -t` zgłosi błąd. Certbot w trybie
+`standalone` potrzebuje na chwilę wolnego portu 80, stąd zatrzymanie nginx; hooki sprawiają,
+że automatyczne odnawianie (timer `certbot.timer`) zrobi to samo bez Twojego udziału.
+
+```bash
+sudo certbot certonly --standalone -d twoja-domena.pl \
+  --pre-hook "systemctl stop nginx" --post-hook "systemctl start nginx"
+
+sudo certbot renew --dry-run     # test odnawiania
+```
+
+W opcji C wykonaj ten krok na **VPS1**.
+
+---
 
 ### Opcja A: Docker / docker-compose
 
-```bash
-cp .env.example .env        # uzupełnij SECRET_KEY (wygeneruj: python -c "import secrets; print(secrets.token_hex(32))")
-cp docker-compose.yml.example docker-compose.yml
+**A1. Instalacja Dockera** (oficjalny skrypt; alternatywnie pakiety z docs.docker.com):
 
-docker compose run --rm app flask db upgrade
-docker compose run --rm app flask create-admin --username admin
+```bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER     # wyloguj się i zaloguj ponownie, żeby zadziałało
+```
+
+**A2. Konfiguracja compose:**
+
+```bash
+cd /opt/recipe-app
+cp docker-compose.yml.example docker-compose.yml
+nano docker-compose.yml
+```
+
+W `docker-compose.yml` zmień mapowanie portu na `"127.0.0.1:8000:8000"` (zamiast `"8000:8000"`).
+To ważne: Docker sam dopisuje reguły iptables i **omija `ufw`**, więc bez tego gunicorn
+byłby dostępny z internetu po zwykłym HTTP. Usuń też z `.env` linię `DATABASE_URL` —
+w kontenerze ustawia ją `docker-compose.yml` (`sqlite:////data/recipes.db`).
+
+**A3. Budowa, migracje, konto admina, start:**
+
+```bash
+docker compose build
+docker compose run --rm app flask db upgrade            # schemat bazy (zawsze przed startem)
+docker compose run --rm app flask create-admin --username admin   # zapyta o hasło
 docker compose up -d
+
+docker compose ps                                       # STATUS powinien dojść do "healthy"
+curl http://127.0.0.1:8000/healthz                      # {"status":"ok"}
 ```
 
 Baza SQLite i przesłane zdjęcia żyją w nazwanych wolumenach Dockera (`db-data`,
-`uploads-data`), więc przetrwają rebuild obrazu. `Dockerfile` uruchamia aplikację jako
-user bez uprawnień roota i wystawia `/healthz` jako `HEALTHCHECK`.
+`uploads-data`), więc przetrwają przebudowę obrazu. Kontener działa jako użytkownik bez
+uprawnień roota i ma `HEALTHCHECK` na `/healthz`. Migracje **nie** uruchamiają się same
+przy starcie kontenera.
+
+**A4. nginx** — tak jak w kroku B5 niżej, z jedną zmianą: **usuń** z konfiguracji blok
+`location /static/ { ... }`. Pliki statyczne i zdjęcia są wewnątrz kontenera/wolumenu,
+a nie w `/opt/recipe-app/static/` na hoście — gunicorn serwuje je sam.
+
+**Aktualizacja do nowej wersji:**
+
+```bash
+cd /opt/recipe-app
+git pull
+docker compose build
+docker compose run --rm app flask db upgrade
+docker compose up -d
+```
+
+Logi: `docker compose logs -f app`.
+
+---
 
 ### Opcja B: gunicorn + nginx + systemd (serwer VPS)
 
-```bash
-# Na serwerze, jako zwykły użytkownik z sudo:
-sudo mkdir -p /opt/recipe-app && sudo chown $USER /opt/recipe-app
-git clone <adres-repozytorium> /opt/recipe-app   # albo skopiuj pliki inaczej
-cd /opt/recipe-app
+Usługa działa jako użytkownik `www-data` (tak jak w `deploy/recipe-app.service.example`),
+więc katalogi, do których aplikacja zapisuje, muszą należeć do niego.
 
+**B1. Środowisko Pythona:**
+
+```bash
+cd /opt/recipe-app
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
+```
 
-cp .env.example .env
-# uzupełnij w .env: SECRET_KEY (wygenerowany), ADMIN_USERNAME, DATABASE_URL jeśli nie SQLite, PROXY_COUNT=1
+**B2. Katalogi z danymi:**
 
-export APP_ENV=production FLASK_APP=app.py
-venv/bin/flask db upgrade
-venv/bin/flask create-admin --username admin
+```bash
+mkdir -p data instance static/uploads
+sudo chown -R www-data:www-data data instance static/uploads
+```
 
+Baza leży w osobnym katalogu `data/` (patrz `DATABASE_URL` w `.env`), bo aplikacja włącza
+w SQLite tryb WAL — obok `recipes.db` muszą móc powstać pliki `recipes.db-wal` i
+`recipes.db-shm`. Jednostka systemd ma `ProtectSystem=strict`, czyli zapisywać można tylko
+w katalogach z `ReadWritePaths`; samo `recipes.db` w katalogu projektu nie wystarczy.
+
+**B3. Uprawnienia `.env`** — aplikacja (jako `www-data`) też czyta ten plik:
+
+```bash
+sudo chown $USER:www-data .env
+chmod 640 .env
+```
+
+**B4. Migracje i konto administratora** (jako `www-data`, żeby baza od razu miała
+właściwego właściciela):
+
+```bash
+sudo -u www-data venv/bin/flask --app app db upgrade
+sudo -u www-data venv/bin/flask --app app create-admin --username admin   # zapyta o hasło
+```
+
+**B5. Usługa systemd:**
+
+```bash
 sudo cp deploy/recipe-app.service.example /etc/systemd/system/recipe-app.service
-sudo nano /etc/systemd/system/recipe-app.service   # popraw ścieżki/User zgodnie z komentarzami w pliku
+sudo nano /etc/systemd/system/recipe-app.service
+```
+
+W pliku zamień linię `ReadWritePaths=` na:
+
+```ini
+ReadWritePaths=/opt/recipe-app/data /opt/recipe-app/static/uploads /opt/recipe-app/instance
+```
+
+(wszystkie trzy katalogi muszą istnieć — inaczej systemd nie uruchomi usługi). Jeśli
+zmieniłeś ścieżkę instalacji albo użytkownika, popraw też `WorkingDirectory`,
+`EnvironmentFile`, `ExecStart` i `User`/`Group`.
+
+```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now recipe-app
 sudo systemctl status recipe-app
+curl http://127.0.0.1:8000/healthz      # {"status":"ok"}
+```
 
+**B6. nginx** (reverse proxy + HTTPS):
+
+```bash
 sudo cp deploy/nginx.conf.example /etc/nginx/sites-available/recipe-app
-sudo nano /etc/nginx/sites-available/recipe-app   # ustaw domenę, ścieżkę do certyfikatu SSL
+sudo sed -i 's/twoja-domena.pl/TWOJA.DOMENA/g' /etc/nginx/sites-available/recipe-app
 sudo ln -s /etc/nginx/sites-available/recipe-app /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default        # domyślna strona „Welcome to nginx”
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-`wsgi.py` to punkt wejścia dla gunicorna (`gunicorn wsgi:app`) — patrz komentarz w pliku.
-Certyfikat SSL (np. Let's Encrypt/certbot) zakładamy jako już wystawiony przed tym krokiem.
+`client_max_body_size` w konfiguracji nginx musi być nieco większy niż `MAX_UPLOAD_MB`
+z `.env` — inaczej duże zdjęcia skończą się błędem 413.
 
-### Kopie zapasowe przez cron (obie opcje)
+**Aktualizacja do nowej wersji:**
 
 ```bash
-# crontab -e, backup codziennie o 3:00 (dostosuj ścieżki do swojego wdrożenia)
-0 3 * * * cd /opt/recipe-app && venv/bin/flask export-backup -o /backups/przepisy-$(date +\%F).zip
+cd /opt/recipe-app
+git pull
+venv/bin/pip install -r requirements.txt
+sudo -u www-data venv/bin/flask --app app db upgrade
+sudo systemctl restart recipe-app
+```
+
+Logi: `journalctl -u recipe-app -f` (aplikacja/gunicorn), `/var/log/nginx/error.log` (nginx).
+
+`wsgi.py` to punkt wejścia dla gunicorna (`gunicorn wsgi:app`) — patrz komentarz w pliku.
+
+---
+
+### Opcja C: dwa serwery połączone WireGuardem
+
+Układ: **VPS1** (publiczny, „brzegowy”) ma nginx i certyfikat SSL; **VPS2** (backend)
+uruchamia aplikację, która nasłuchuje tylko w tunelu (`10.10.10.2:8000`) i nie jest widoczna
+z internetu. To tunel punkt-do-punktu, nie pełny VPN — szczegóły w komentarzach plików
+`deploy/wireguard/*.conf.example`.
+
+**C1. WireGuard na obu serwerach:**
+
+```bash
+sudo apt install -y wireguard
+# klucze generuj osobno na każdym serwerze (polecenia w komentarzach plików .example)
+sudo cp deploy/wireguard/vps1-wg0.conf.example /etc/wireguard/wg0.conf   # na VPS1
+sudo cp deploy/wireguard/vps2-wg0.conf.example /etc/wireguard/wg0.conf   # na VPS2
+sudo nano /etc/wireguard/wg0.conf      # wpisz klucze i publiczne adresy IP
+sudo chmod 600 /etc/wireguard/wg0.conf
+sudo systemctl enable --now wg-quick@wg0
+```
+
+Na VPS1 otwórz port tunelu: `sudo ufw allow 51820/udp`. Sprawdź połączenie:
+`ping 10.10.10.2` z VPS1 i `sudo wg show` (powinien być widoczny „latest handshake”).
+
+**C2. Aplikacja na VPS2** — kroki 1–2 oraz opcja A albo B, z tymi różnicami:
+
+- nginx i certyfikat **nie** są potrzebne na VPS2,
+- opcja B: w `ExecStart` jednostki systemd zmień `--bind 127.0.0.1:8000` na
+  `--bind 10.10.10.2:8000`, a w sekcji `[Unit]` dopisz `After=wg-quick@wg0.service` i
+  `Requires=wg-quick@wg0.service` (adres tunelu musi istnieć przed startem gunicorna),
+- opcja A: mapowanie portu w `docker-compose.yml` ustaw na `"10.10.10.2:8000:8000"`,
+- zapora na VPS2 — port aplikacji tylko z tunelu:
+  `sudo ufw allow in on wg0 to any port 8000 proto tcp`,
+- `PROXY_COUNT=1` (jedynym proxy jest nginx na VPS1).
+
+**C3. nginx na VPS1** — krok 3 (certyfikat) i krok B6, ale w konfiguracji nginx:
+
+- `proxy_pass http://10.10.10.2:8000;` zamiast `http://127.0.0.1:8000`,
+- **usuń** blok `location /static/ { ... }` — pliki statyczne są na VPS2.
+
+Test z VPS1: `curl http://10.10.10.2:8000/healthz`.
+
+---
+
+### Krok końcowy: weryfikacja (wszystkie opcje)
+
+```bash
+curl -I http://twoja-domena.pl            # 301 → https://
+curl https://twoja-domena.pl/healthz      # {"status":"ok"}
+```
+
+Następnie otwórz `https://twoja-domena.pl/login`, zaloguj się na konto administratora i
+dodaj testowy przepis ze zdjęciem (sprawdza zapis do bazy i do `static/uploads`).
+
+### Kopie zapasowe przez cron
+
+Opcja B (crontab użytkownika `www-data`: `sudo crontab -u www-data -e`; katalog
+`/backups` musi istnieć i należeć do `www-data`):
+
+```bash
+# backup codziennie o 3:00
+0 3 * * * cd /opt/recipe-app && venv/bin/flask --app app export-backup -o /backups/przepisy-$(date +\%F).zip
+```
+
+Opcja A (crontab Twojego użytkownika, należącego do grupy `docker`):
+
+```bash
+0 3 * * * cd /opt/recipe-app && docker compose exec -T app flask export-backup -o /tmp/kopia.zip && docker compose cp app:/tmp/kopia.zip /backups/przepisy-$(date +\%F).zip
 ```
 
 `flask export-backup` działa bez przeglądarki/sesji i zapisuje plik z uprawnieniami `600`
 (czytelny tylko dla właściciela) — patrz sekcja „Kopia zapasowa przepisów” wyżej.
+Kopie regularnie przenoś **poza serwer** (np. `rsync`/`rclone` do chmury).
+
+### Najczęstsze problemy
+
+| Objaw | Przyczyna i rozwiązanie |
+|-------|--------------------------|
+| Usługa/kontener nie startuje, w logu „Odmowa startu — niebezpieczna konfiguracja” | Brak lub za krótki `SECRET_KEY` w `.env` (min. 32 znaki). |
+| `502 Bad Gateway` z nginx | Gunicorn nie działa albo słucha na innym adresie — `systemctl status recipe-app` / `docker compose ps`, sprawdź `curl` na `/healthz` lokalnie. |
+| Logowanie „nie działa” (wraca na stronę logowania), błąd CSRF | Strona otwarta po zwykłym `http://` — ciasteczko sesji jest tylko dla HTTPS. Wejdź przez `https://` i sprawdź `PROXY_COUNT=1`. |
+| `attempt to write a readonly database` / `unable to open database file` | Katalog z bazą nie należy do `www-data` albo nie ma go w `ReadWritePaths` (krok B2 i B5). |
+| Błąd przy zapisie zdjęcia | `static/uploads` nie należy do `www-data` / brak w `ReadWritePaths`. |
+| `413 Request Entity Too Large` | Zwiększ `client_max_body_size` w nginx (powyżej `MAX_UPLOAD_MB`). |
+| Konto admina zablokowane po błędnych hasłach | `flask unlock-user --username admin` (w opcji A przez `docker compose exec app ...`). |
 
 ### Lista kontrolna przed pierwszym uruchomieniem na produkcji
 
-- [ ] `SECRET_KEY` wygenerowany (`python -c "import secrets; print(secrets.token_hex(32))"`)
+- [ ] `SECRET_KEY` wygenerowany (`python3 -c "import secrets; print(secrets.token_hex(32))"`)
       i ustawiony w `.env` — bez tego aplikacja **odmówi startu** (patrz `validate_production_config`).
 - [ ] `APP_ENV=production` (domyślne — po prostu nie ustawiaj `development` na serwerze).
-- [ ] Aplikacja dostępna wyłącznie przez HTTPS (nginx/Caddy + certyfikat); `SESSION_COOKIE_SECURE`
+- [ ] Aplikacja dostępna wyłącznie przez HTTPS (nginx + certyfikat); `SESSION_COOKIE_SECURE`
       zostaje na `true` (domyślne w production).
+- [ ] Port `8000` niedostępny z internetu (bind na `127.0.0.1` / adres tunelu; w Dockerze
+      mapowanie `127.0.0.1:8000:8000`, bo Docker omija `ufw`).
 - [ ] `PROXY_COUNT` ustawiony na dokładną liczbę serwerów proxy przed aplikacją (zwykle `1`
       dla pojedynczego nginx) — źle ustawiony psuje limit logowań per IP i wykrywanie HTTPS.
 - [ ] Hasło administratora nadane przy `flask create-admin` jest unikalne i silne
       (min. 10 znaków, nie z listy popularnych — wymuszane automatycznie).
-- [ ] Migracje zastosowane (`flask db upgrade`) **przed** pierwszym uruchomieniem gunicorna.
+- [ ] Migracje zastosowane (`flask db upgrade`) **przed** pierwszym uruchomieniem gunicorna
+      i po każdej aktualizacji kodu.
 - [ ] Kopie zapasowe skonfigurowane (cron + `flask export-backup`) i trzymane **poza** serwerem.
-- [ ] Przy więcej niż jednym workerze gunicorna: `RATELIMIT_STORAGE_URI` wskazuje na Redis,
-      nie zostaje na domyślnym `memory://` (inaczej każdy worker liczy próby logowania osobno).
-- [ ] `.env` ma uprawnienia `600` i nie trafia do systemu kontroli wersji (już w `.gitignore`).
+- [ ] Przy więcej niż jednym workerze gunicorna (domyślnie jest ich 4): `RATELIMIT_STORAGE_URI`
+      wskazuje na Redis, a nie zostaje na `memory://` (inaczej każdy worker liczy próby
+      logowania osobno).
+- [ ] `.env` nie trafia do systemu kontroli wersji (już w `.gitignore`) i nie jest czytelny dla
+      innych użytkowników (`600`, w opcji B `640` z grupą `www-data`).
