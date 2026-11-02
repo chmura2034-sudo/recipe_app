@@ -19,7 +19,7 @@ PrivateKey = PRIVATE_KEY_VPS2
 # ListenPort = 51820
 
 [Peer]
-# VPS1 (edge) — to jego adres publiczny, NIE adres w tunelu.
+# VPS1 (edge) - to jego adres publiczny, NIE adres w tunelu.
 PublicKey = PUBLIC_KEY_VPS1
 Endpoint = ADRES_PUBLICZNY_VPS1:51820
 AllowedIPs = 10.10.10.1/32

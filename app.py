@@ -66,7 +66,7 @@ login_manager.session_protection = "basic"
 csrf = CSRFProtect()
 migrate = Migrate()
 
-# Fikcyjny hash używany, gdy podany login nie istnieje — dzięki temu czas odpowiedzi
+# Fikcyjny hash używany, gdy podany login nie istnieje - dzięki temu czas odpowiedzi
 # nie zdradza, czy konto istnieje (bez tego brak sprawdzania hasła byłby wyraźnie szybszy).
 _DUMMY_PASSWORD_HASH = generate_password_hash("nieistniejace-konto-atrapa")
 
@@ -94,7 +94,7 @@ def serialize_ingredient_entries(entries) -> str:
     """
     Zamienia listę wpisów [{"type": "section", "name": ...}, {"type": "item", "amount": ...,
     "unit": ..., "name": ...}] na tekst zapisywany w Recipe.ingredients. Jedno miejsce dla
-    formularza i importu kopii zapasowej — dzięki temu dane z obu źródeł są tak samo czyszczone.
+    formularza i importu kopii zapasowej - dzięki temu dane z obu źródeł są tak samo czyszczone.
     """
     lines = []
     for entry in entries or []:
@@ -108,7 +108,7 @@ def serialize_ingredient_entries(entries) -> str:
             name = _clean_line_field(entry.get("name"))
             if not name:
                 continue
-            # amount jest pierwszym polem linii — nie może przypadkiem wyglądać jak nagłówek sekcji
+            # amount jest pierwszym polem linii - nie może przypadkiem wyglądać jak nagłówek sekcji
             amount = _clean_line_field(entry.get("amount")).replace(Recipe.SECTION_MARKER, "")
             unit = _clean_line_field(entry.get("unit"))
             kcal = _clean_line_field(entry.get("kcal"))
@@ -132,7 +132,7 @@ def is_safe_redirect_target(target) -> bool:
 
 
 # ---------- wyszukiwanie po składnikach ----------
-# Składniki, które ma prawie każdy — nie liczymy ich jako „brakujące".
+# Składniki, które ma prawie każdy - nie liczymy ich jako „brakujące".
 # Początki słów (bez polskich znaków), żeby objąć odmianę: sól/soli, cukier/cukru, woda/wody...
 PANTRY_BASICS = ("sol", "pieprz", "wod", "cukier", "cukr", "olej", "oliw")
 _INGREDIENT_STOPWORDS = {"i", "oraz", "lub", "albo", "a", "z", "ze", "w", "mam", "troche", "do", "smaku"}
@@ -145,7 +145,7 @@ def _fold(text: str) -> str:
 
 
 def _stem(word: str) -> str:
-    """Bardzo prosty „rdzeń" polskiego słowa — obcina końcówkę fleksyjną, by 'jajka', 'jajko'
+    """Bardzo prosty „rdzeń" polskiego słowa - obcina końcówkę fleksyjną, by 'jajka', 'jajko'
     i 'jaj' oraz 'mąka'/'mąki'/'mąkę' pasowały do siebie."""
     if len(word) >= 6:
         return word[:-2]
@@ -183,7 +183,7 @@ def match_recipe_ingredients(recipe, terms):
             matched_names.update(hits)
     def is_basic(name):
         words = re.findall(r"\w+", _fold(name))
-        # Tylko krótkie nazwy („sól", „cukru", „oliwa z oliwek") — „cukier puder" czy
+        # Tylko krótkie nazwy („sól", „cukru", „oliwa z oliwek") - „cukier puder" czy
         # „sól morska" to wciąż podstawy, ale „sos sojowy" już nie (inny początek).
         return bool(words) and words[0].startswith(PANTRY_BASICS)
 
@@ -197,7 +197,7 @@ def match_recipe_ingredients(recipe, terms):
     }
 
 
-# Odwołania do wgranych zdjęć w treści wpisu na blogu (Markdown) — do kopii zapasowej.
+# Odwołania do wgranych zdjęć w treści wpisu na blogu (Markdown) - do kopii zapasowej.
 BLOG_UPLOAD_REF_RE = re.compile(r"/static/uploads/([A-Za-z0-9_-]+\.[A-Za-z0-9]+)")
 
 # Strony publiczne, które service worker (PWA) może zapisać do czytania offline.
@@ -211,7 +211,7 @@ def validate_new_password(password: str, min_length: int):
     if len(password or "") < min_length:
         return f"Hasło musi mieć co najmniej {min_length} znaków."
     if password.lower() in WEAK_PASSWORDS:
-        return "To hasło jest zbyt popularne — wybierz inne."
+        return "To hasło jest zbyt popularne - wybierz inne."
     return None
 
 
@@ -270,7 +270,7 @@ def create_app(config_class=None):
     app.config.from_object(config_class or get_config())
     validate_production_config(app.config)
 
-    # Za reverse proxy (nginx/Caddy/ngrok...) — zaufaj nagłówkom X-Forwarded-* dokładnie
+    # Za reverse proxy (nginx/Caddy/ngrok...) - zaufaj nagłówkom X-Forwarded-* dokładnie
     # tyle razy, ile proxy stoi przed aplikacją. Przy 0 nagłówki są ignorowane.
     proxy_count = app.config["PROXY_COUNT"]
     if proxy_count > 0:
@@ -314,7 +314,7 @@ def create_app(config_class=None):
 
     @app.after_request
     def set_security_headers(response):
-        # Przeglądarka nie będzie "zgadywać" typu pliku inaczej niż wg Content-Type —
+        # Przeglądarka nie będzie "zgadywać" typu pliku inaczej niż wg Content-Type -
         # istotne m.in. dla przesłanych zdjęć, żeby nigdy nie zostały wykonane jako HTML/JS.
         response.headers["X-Content-Type-Options"] = "nosniff"
         # Blokuje osadzanie strony w <iframe> na obcej domenie (ochrona przed clickjackingiem).
@@ -350,12 +350,12 @@ def create_app(config_class=None):
                 f"max-age={app.config['HSTS_SECONDS']}; includeSubDomains"
             )
 
-        # Strony HTML (zwłaszcza panel) nie powinny być współdzielone w cache pośredników —
+        # Strony HTML (zwłaszcza panel) nie powinny być współdzielone w cache pośredników -
         # zawierają nonce, token CSRF i dane zależne od zalogowanego użytkownika.
         if response.mimetype == "text/html":
             response.headers["Cache-Control"] = "private, no-store"
             # Service worker (PWA) zapisuje do czytania offline TYLKO publiczne strony oglądane
-            # przez niezalogowanych — nigdy panelu ani stron z danymi zalogowanego użytkownika.
+            # przez niezalogowanych - nigdy panelu ani stron z danymi zalogowanego użytkownika.
             if (
                 response.status_code == 200
                 and request.method == "GET"
@@ -457,7 +457,7 @@ def create_app(config_class=None):
 
         # Wyszukiwanie po składnikach („mam jajka, mąkę i mleko"): zostają przepisy, które
         # zawierają choć jeden podany składnik; najpierw te, w których pasuje najwięcej
-        # podanych składników, a przy remisie — te, którym brakuje najmniej.
+        # podanych składników, a przy remisie - te, którym brakuje najmniej.
         matches = {}
         if ingredients_query:
             terms = parse_ingredient_terms(ingredients_query)
@@ -518,7 +518,7 @@ def create_app(config_class=None):
         )
 
     def _similar_recipes(recipe, limit=4):
-        """Przepisy z największą liczbą wspólnych tagów. Gdy żaden nie ma wspólnego tagu —
+        """Przepisy z największą liczbą wspólnych tagów. Gdy żaden nie ma wspólnego tagu -
         po prostu najnowsze (wtedy sekcja nazywa się „Inne przepisy"). Zwraca (lista, czy_po_tagach)."""
         base = Recipe.query.filter(Recipe.status == "published", Recipe.id != recipe.id)
         tag_ids = [t.id for t in recipe.tags]
@@ -558,7 +558,7 @@ def create_app(config_class=None):
                 db.session.add(DailyView(kind=kind, object_id=object_id, day=today, views=1))
             db.session.commit()
         except IntegrityError:
-            # Równoległe pierwsze wyświetlenie dnia — wiersz już istnieje, więc tylko zwiększamy.
+            # Równoległe pierwsze wyświetlenie dnia - wiersz już istnieje, więc tylko zwiększamy.
             db.session.rollback()
             db.session.execute(
                 update(DailyView)
@@ -629,7 +629,7 @@ def create_app(config_class=None):
     COMMENT_THANKS = "Dziękujemy! Komentarz pojawi się po zatwierdzeniu przez moderatora."
 
     def _hmac_hex(value: str) -> str:
-        """HMAC-SHA256 z SECRET_KEY — pozwala porównywać identyfikatory bez przechowywania ich wprost."""
+        """HMAC-SHA256 z SECRET_KEY - pozwala porównywać identyfikatory bez przechowywania ich wprost."""
         return hmac.new(app.config["SECRET_KEY"].encode(), value.encode(), hashlib.sha256).hexdigest()
 
     def _voter_hash_from_cookie():
@@ -750,7 +750,7 @@ def create_app(config_class=None):
     @app.route("/manifest.webmanifest")
     def web_manifest():
         manifest = {
-            "name": "Szczypta Smaku — przepisy i blog kulinarny",
+            "name": "Szczypta Smaku - przepisy i blog kulinarny",
             "short_name": "Szczypta Smaku",
             "description": "Przepisy kulinarne z listą zakupów, minutnikami i dostępem offline.",
             "lang": "pl",
@@ -826,7 +826,7 @@ def create_app(config_class=None):
     def _post_login_redirect_endpoint():
         return "admin_dashboard" if current_user.is_admin else "redaktor_dashboard"
 
-    # Jeden komunikat dla WSZYSTKICH niepowodzeń (zły login, złe hasło, konto zablokowane) —
+    # Jeden komunikat dla WSZYSTKICH niepowodzeń (zły login, złe hasło, konto zablokowane) -
     # nie ujawniamy atakującemu, które konta istnieją.
     LOGIN_FAILED_MESSAGE = (
         "Nieprawidłowa nazwa użytkownika lub hasło. "
@@ -1135,7 +1135,7 @@ def create_app(config_class=None):
             flash(password_error, "error")
         else:
             user.set_password(password)
-            # Reset hasła odblokowuje też konto — redaktor mógł je stracić przez
+            # Reset hasła odblokowuje też konto - redaktor mógł je stracić przez
             # zapomniane stare hasło i serię nieudanych prób logowania.
             user.register_successful_login()
             db.session.commit()
@@ -1206,7 +1206,7 @@ def create_app(config_class=None):
         if request.method == "POST":
             _save_recipe_form(recipe)
             # Każda zmiana redaktora (nawet w już opublikowanym przepisie) wraca do kolejki
-            # zatwierdzania — administrator musi ponownie potwierdzić treść.
+            # zatwierdzania - administrator musi ponownie potwierdzić treść.
             recipe.status = "pending"
             recipe.rejection_reason = None
             db.session.commit()
@@ -1286,7 +1286,7 @@ def create_app(config_class=None):
         today = date.today()
         since = today - timedelta(days=days - 1)
 
-        # Wyświetlenia dzień po dniu (z zerami dla dni bez wizyt — inaczej wykres by „skakał").
+        # Wyświetlenia dzień po dniu (z zerami dla dni bez wizyt - inaczej wykres by „skakał").
         per_day = dict(
             db.session.query(DailyView.day, func.sum(DailyView.views))
             .filter(DailyView.day >= since)
@@ -1536,7 +1536,7 @@ def create_app(config_class=None):
 
     def _render_blog_form(post, action_endpoint, cancel_endpoint, editor_mode, is_new):
         # Po nieudanej walidacji nowego wpisu `post` jest niezapisanym obiektem z danymi
-        # z formularza — pokazujemy je ponownie, żeby autor nie stracił tekstu.
+        # z formularza - pokazujemy je ponownie, żeby autor nie stracił tekstu.
         form_action = (
             url_for(action_endpoint) if is_new else url_for(action_endpoint, post_id=post.id)
         )
@@ -1551,7 +1551,7 @@ def create_app(config_class=None):
 
     def _save_blog_form(post: BlogPost) -> bool:
         """Przepisuje dane z formularza do wpisu. Zwraca False (z komunikatem flash), gdy
-        brakuje wymaganych pól — wtedy wywołujący nie zapisuje zmian."""
+        brakuje wymaganych pól - wtedy wywołujący nie zapisuje zmian."""
         title = request.form.get("title", "").strip()[:150]
         content = request.form.get("content", "").strip()
         post.title = title
@@ -1628,7 +1628,7 @@ def create_app(config_class=None):
                 infos = zf.infolist()
                 max_bytes = app.config["BACKUP_MAX_UNCOMPRESSED_MB"] * 1024 * 1024
                 if len(infos) > app.config["BACKUP_MAX_ENTRIES"] or sum(i.file_size for i in infos) > max_bytes:
-                    flash("Archiwum jest zbyt duże po rozpakowaniu — import odrzucony.", "error")
+                    flash("Archiwum jest zbyt duże po rozpakowaniu - import odrzucony.", "error")
                     return redirect(url_for("backup_page"))
 
                 with zf.open("recipes.json") as fh:
@@ -1701,23 +1701,23 @@ def create_app(config_class=None):
             flash(summary, "success")
         except (zipfile.BadZipFile, KeyError, json.JSONDecodeError, UnicodeDecodeError) as exc:
             db.session.rollback()
-            flash(f"Nie udało się odczytać kopii zapasowej — nieprawidłowy plik ({exc}).", "error")
+            flash(f"Nie udało się odczytać kopii zapasowej - nieprawidłowy plik ({exc}).", "error")
 
         return redirect(url_for("backup_page"))
 
     def _sanitize_and_save_image(file_bytes: bytes):
         """
         Weryfikuje, że `file_bytes` to naprawdę obraz w dozwolonym formacie, dekoduje go
-        i zapisuje na dysk jako świeżo zakodowany plik pod losową nazwą — zamiast ufać
+        i zapisuje na dysk jako świeżo zakodowany plik pod losową nazwą - zamiast ufać
         rozszerzeniu pliku albo deklarowanemu typowi MIME (oba może sfałszować atakujący).
 
         Dzięki pełnemu zdekodowaniu i ponownemu zapisaniu obrazu:
         - odrzucamy pliki, które nie są prawidłowymi obrazami (np. przemianowany
           skrypt, plik-polyglot łączący obraz z HTML/JS, uszkodzony plik),
         - usuwamy wszelkie metadane EXIF (mogą zawierać dane lokalizacji GPS,
-          model urządzenia itp. — ryzyko prywatności autora zdjęcia),
+          model urządzenia itp. - ryzyko prywatności autora zdjęcia),
         - usuwamy dowolne dane doklejone do pliku poza właściwą treścią obrazu,
-        - chronimy przed „bombami dekompresji" (plik deklarujący miliardy pikseli) —
+        - chronimy przed „bombami dekompresji" (plik deklarujący miliardy pikseli) -
           Pillow domyślnie rzuca tu wyjątkiem; dodatkowo ograniczamy maksymalny
           zapisywany wymiar, żeby nie przechowywać nadmiernie dużych plików.
 
@@ -1730,7 +1730,7 @@ def create_app(config_class=None):
             image = Image.open(io.BytesIO(file_bytes))
             image.load()  # wymusza pełne zdekodowanie pikseli (wyłapuje uszkodzone/spreparowane pliki)
         except Image.DecompressionBombError:
-            return None, "Obraz jest zbyt duży (zbyt wiele pikseli) — odrzucono ze względów bezpieczeństwa."
+            return None, "Obraz jest zbyt duży (zbyt wiele pikseli) - odrzucono ze względów bezpieczeństwa."
         except (UnidentifiedImageError, OSError, ValueError):
             return None, "Plik nie jest prawidłowym obrazem (dozwolone: PNG, JPG, GIF, WEBP)."
 
@@ -1738,7 +1738,7 @@ def create_app(config_class=None):
         if detected_format not in SAFE_IMAGE_FORMATS:
             return None, "Niedozwolony format obrazka. Dozwolone: PNG, JPG, GIF, WEBP."
 
-        # Ograniczamy maksymalny wymiar — zmniejszamy proporcjonalnie, jeśli trzeba.
+        # Ograniczamy maksymalny wymiar - zmniejszamy proporcjonalnie, jeśli trzeba.
         max_dim = app.config["MAX_IMAGE_DIMENSION"]
         if image.width > max_dim or image.height > max_dim:
             image.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
@@ -1746,7 +1746,7 @@ def create_app(config_class=None):
         save_format = detected_format
         save_kwargs = {}
         if save_format == "JPEG":
-            # JPEG nie obsługuje kanału alfa/palety — konwertujemy do RGB.
+            # JPEG nie obsługuje kanału alfa/palety - konwertujemy do RGB.
             if image.mode not in ("RGB", "L"):
                 image = image.convert("RGB")
             save_kwargs["quality"] = 88
@@ -1756,7 +1756,7 @@ def create_app(config_class=None):
         target_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
 
         try:
-            # Zapis BEZ przekazywania oryginalnych metadanych (brak exif=...) —
+            # Zapis BEZ przekazywania oryginalnych metadanych (brak exif=...) -
             # to jawnie usuwa EXIF i wszystko poza samą siatką pikseli obrazu.
             image.save(target_path, format=save_format, **save_kwargs)
         except OSError as exc:
@@ -1815,7 +1815,7 @@ def create_app(config_class=None):
                         # Płaska lista dla wstecznej kompatybilności z narzędziami czytającymi
                         # starszy format kopii zapasowej (bez podziału na sekcje).
                         "ingredients": recipe.ingredients_list,
-                        # Pełna struktura z podziałem na sekcje (np. "Ciasto"/"Krem") — używana
+                        # Pełna struktura z podziałem na sekcje (np. "Ciasto"/"Krem") - używana
                         # przy imporcie w tej i nowszych wersjach aplikacji.
                         "ingredients_sections": recipe.ingredients_sections,
                         "instructions": recipe.instructions_list,
@@ -1901,7 +1901,7 @@ def create_app(config_class=None):
         else:
             action = "zaktualizowano"
 
-        # Zdjęcia z archiwum dostały nowe nazwy — podmieniamy odwołania w treści.
+        # Zdjęcia z archiwum dostały nowe nazwy - podmieniamy odwołania w treści.
         def remap(match):
             new_name = image_name_map.get(match.group(1))
             return f"{BLOG_IMAGE_PREFIX}{new_name}" if new_name else match.group(0)
@@ -1924,7 +1924,7 @@ def create_app(config_class=None):
 
     # ---------- kopia zapasowa: komentarze i oceny czytelników ----------
     def _export_reader_data():
-        """Komentarze (pod przepisami i wpisami) oraz oceny — powiązane z treścią po slugu,
+        """Komentarze (pod przepisami i wpisami) oraz oceny - powiązane z treścią po slugu,
         bo identyfikatory w bazie docelowej mogą być inne."""
         comments = []
         for c in Comment.query.order_by(Comment.id).all():
@@ -1949,7 +1949,7 @@ def create_app(config_class=None):
             {
                 "recipe_slug": r.recipe.slug,
                 "score": r.score,
-                # HMAC z SECRET_KEY — nie da się z niego odczytać IP ani ciasteczka. Po imporcie
+                # HMAC z SECRET_KEY - nie da się z niego odczytać IP ani ciasteczka. Po imporcie
                 # na serwer z innym SECRET_KEY czytelnik zagłosuje po prostu „od nowa".
                 "voter_hash": r.voter_hash,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
@@ -1968,7 +1968,7 @@ def create_app(config_class=None):
 
     def _restore_reader_data(manifest: dict, mode: str):
         """Przywraca komentarze i oceny z kopii. Komentarze nigdy się nie dublują (ten sam
-        cel + podpis + treść = ten sam komentarz). Oceny: jedna na (przepis, głosujący) —
+        cel + podpis + treść = ten sam komentarz). Oceny: jedna na (przepis, głosujący) -
         w trybie „Dodaj tylko nowe" istniejąca ocena zostaje, w pozostałych jest nadpisywana.
         Zwraca słownik z licznikami."""
         stats = {"comments": 0, "ratings_new": 0, "ratings_updated": 0, "skipped": 0}
@@ -2024,7 +2024,7 @@ def create_app(config_class=None):
                 continue
             voter_hash = str(item.get("voter_hash") or "")
             if not hash_re.fullmatch(voter_hash):
-                voter_hash = secrets.token_hex(32)  # głos bez identyfikatora — zachowujemy jako osobny
+                voter_hash = secrets.token_hex(32)  # głos bez identyfikatora - zachowujemy jako osobny
             rating = existing_ratings.get((recipe_id, voter_hash))
             if rating is not None:
                 if mode != "skip_existing" and rating.score != score:
@@ -2046,7 +2046,7 @@ def create_app(config_class=None):
     # ---------- kopia zapasowa: rozpakowywanie zdjęć z importu ----------
     def _extract_backup_images(zf: zipfile.ZipFile) -> dict:
         """Sanityzuje i zapisuje na dysk zdjęcia z archiwum (pod nowymi, losowymi nazwami).
-        Zawartość ZIP-a traktujemy jako dane niezaufane — każdy plik przechodzi przez
+        Zawartość ZIP-a traktujemy jako dane niezaufane - każdy plik przechodzi przez
         tę samą walidację/ponowne zakodowanie przez Pillow co zdjęcia wgrywane ręcznie.
         Zwraca mapę: oryginalna nazwa pliku w archiwum -> nowa nazwa pliku na dysku."""
         name_map = {}
@@ -2062,7 +2062,7 @@ def create_app(config_class=None):
 
             filename, error = _sanitize_and_save_image(file_bytes)
             if error:
-                # Pomijamy pojedyncze uszkodzone/nieprawidłowe zdjęcie — nie przerywamy
+                # Pomijamy pojedyncze uszkodzone/nieprawidłowe zdjęcie - nie przerywamy
                 # całego importu z powodu jednego złego pliku w archiwum.
                 continue
             name_map[original_name] = filename
@@ -2181,10 +2181,10 @@ def create_app(config_class=None):
     def _build_ingredients_text():
         """
         Buduje tekst składników do zapisania w bazie. Preferuje ustrukturyzowane pole
-        `ingredients_structured` (JSON zbudowany przez JS tuż przed wysłaniem formularza —
+        `ingredients_structured` (JSON zbudowany przez JS tuż przed wysłaniem formularza -
         pozwala przeplatać nagłówki sekcji ze zwykłymi składnikami w dowolnej kolejności).
         Jeśli go brak (np. JS wyłączony), spada do starych, płaskich pól name[]/amount[]/unit[]
-        bez podziału na sekcje — formularz nadal da się wypełnić.
+        bez podziału na sekcje - formularz nadal da się wypełnić.
         """
         raw_structured = request.form.get("ingredients_structured", "").strip()
         entries = None
@@ -2251,7 +2251,7 @@ def create_app(config_class=None):
 
         # Wszelkie zapytania do bazy w trakcie wypełniania formularza (sprawdzanie unikalności
         # sluga, wyszukiwanie/tworzenie tagów) mogłyby wywołać przedwczesny autoflush sesji,
-        # zanim przepis ma komplet wymaganych pól — stąd blok no_autoflush.
+        # zanim przepis ma komplet wymaganych pól - stąd blok no_autoflush.
         with db.session.no_autoflush:
             # Slug generujemy tylko jeśli tytuł się zmienił / to nowy przepis
             base_slug = slugify(title) or "przepis"
@@ -2373,7 +2373,7 @@ def create_app(config_class=None):
     @click.option("--output", "-o", required=True, type=click.Path(dir_okay=False, writable=True),
                   help="Ścieżka pliku .zip do zapisania (dla cron: np. /backups/przepisy-$(date +%F).zip).")
     def export_backup(output):
-        """Zapisuje kopię zapasową (przepisy + zdjęcia) bez logowania w przeglądarce — do zadań cron."""
+        """Zapisuje kopię zapasową (przepisy + zdjęcia) bez logowania w przeglądarce - do zadań cron."""
         buffer = _build_backup_zip()
         with open(output, "wb") as fh:
             fh.write(buffer.getvalue())
@@ -2385,7 +2385,7 @@ def create_app(config_class=None):
 
 if __name__ == "__main__":
     # Wygodne uruchomienie lokalne: APP_ENV=development python app.py
-    # Na produkcji NIE używaj tego — uruchamiaj gunicorna (patrz wsgi.py / DEPLOYMENT.md).
+    # Na produkcji NIE używaj tego - uruchamiaj gunicorna (patrz wsgi.py / DEPLOYMENT.md).
     _dev_app = create_app()
     if _dev_app.config["APP_ENV"] != "development":
         raise SystemExit("Serwer deweloperski działa tylko przy APP_ENV=development. Na produkcji użyj gunicorna.")

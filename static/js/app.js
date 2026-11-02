@@ -1,5 +1,5 @@
 /*
- * Wspólne, małe zachowania interfejsu — ładowane z własnej domeny (script-src 'self'),
+ * Wspólne, małe zachowania interfejsu - ładowane z własnej domeny (script-src 'self'),
  * dzięki czemu szablony nie potrzebują inline'owych handlerów (onclick=, onsubmit=),
  * których polityka CSP (bez 'unsafe-inline') i tak by nie wykonała.
  *
@@ -47,7 +47,7 @@
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", dark ? "#2a201a" : "#a3461f");
     if (themeButton) {
-      var label = "Motyw: " + THEME_NAMES[pref] + " — kliknij, aby zmienić";
+      var label = "Motyw: " + THEME_NAMES[pref] + " - kliknij, aby zmienić";
       themeButton.textContent = THEME_ICONS[pref];
       themeButton.setAttribute("title", label);
       themeButton.setAttribute("aria-label", label);
@@ -63,7 +63,7 @@
       try {
         if (next === "auto") localStorage.removeItem("theme");
         else localStorage.setItem("theme", next);
-      } catch (e) { /* tryb prywatny bez localStorage — motyw działa do odświeżenia */ }
+      } catch (e) { /* tryb prywatny bez localStorage - motyw działa do odświeżenia */ }
       applyTheme(next);
     });
   }
@@ -96,7 +96,7 @@
         wakeHint.textContent = defaultHint;
         lock.addEventListener("release", function () {
           wakeLock = null;
-          // Przeglądarka zwalnia blokadę po przejściu do innej karty/aplikacji —
+          // Przeglądarka zwalnia blokadę po przejściu do innej karty/aplikacji -
           // przycisk zostaje włączony, a blokada wraca po powrocie (visibilitychange).
           if (!wanted) setPressed(false);
         });
@@ -146,7 +146,7 @@
   // Service worker działa tylko w bezpiecznym kontekście (HTTPS albo localhost).
   if ("serviceWorker" in navigator && window.isSecureContext) {
     window.addEventListener("load", function () {
-      navigator.serviceWorker.register("/sw.js").catch(function () { /* PWA niedostępne — strona działa normalnie */ });
+      navigator.serviceWorker.register("/sw.js").catch(function () { /* PWA niedostępne - strona działa normalnie */ });
     });
   }
 

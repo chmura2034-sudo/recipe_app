@@ -300,7 +300,7 @@ h1 { margin-top: 0; }
 
 /* Wiersz składnika: dwie grupy pól (ilość/jednostka/nazwa + wartości odżywcze)
    ułożone obok siebie w jednym rzędzie; gdy zabraknie miejsca, druga grupa
-   zawija się jako całość pod pierwszą — nigdy się na siebie nie nakładają. */
+   zawija się jako całość pod pierwszą - nigdy się na siebie nie nakładają. */
 .ingredient-row {
   display: flex;
   flex-wrap: wrap;
@@ -341,7 +341,7 @@ h1 { margin-top: 0; }
 
 .step-row {
   display: grid;
-  grid-template-columns: 28px 1fr auto;
+  grid-template-columns: 28px 1fr auto auto auto;
   gap: 0.5rem;
   align-items: center;
 }

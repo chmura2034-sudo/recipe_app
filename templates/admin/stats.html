@@ -14,7 +14,7 @@
     </nav>
   </div>
   <p class="muted-info">
-    Własne liczniki — bez Google Analytics i bez ciasteczek śledzących. Liczone są wyświetlenia
+    Własne liczniki - bez Google Analytics i bez ciasteczek śledzących. Liczone są wyświetlenia
     opublikowanych przepisów i wpisów przez niezalogowanych czytelników (bez botów).
   </p>
 
@@ -28,7 +28,7 @@
   <section class="queue-section">
     <h2>Wyświetlenia dziennie</h2>
     {% if max_views %}
-      {# Słupki w czystym HTML/CSS — wysokość proporcjonalna do maksimum okresu. #}
+      {# Słupki w czystym HTML/CSS - wysokość proporcjonalna do maksimum okresu. #}
       <div class="bar-chart" role="img" aria-label="Wykres wyświetleń dziennie, maksimum {{ max_views }}">
         <div class="bar-chart-axis" aria-hidden="true">
           <span>{{ max_views }}</span><span>{{ (max_views / 2) | round(0, 'ceil') | int if max_views > 1 else '' }}</span><span>0</span>

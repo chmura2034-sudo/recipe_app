@@ -21,10 +21,10 @@
       </select>
       <input type="text" name="ingredient_name[]" class="ing-name" placeholder="Nazwa składnika, np. mąka pszenna" value="{{ item.name if item else '' }}" required>
       <span class="ing-nutrition-group" title="Wartości odżywcze dla podanej ilości (opcjonalnie)">
-        <input type="number" step="any" min="0" name="ingredient_kcal[]" class="ing-nutrition" placeholder="kcal" value="{{ item.kcal if item else '' }}" title="Kalorie dla podanej ilości">
-        <input type="number" step="any" min="0" name="ingredient_protein[]" class="ing-nutrition" placeholder="B (g)" value="{{ item.protein if item else '' }}" title="Białko (g) dla podanej ilości">
-        <input type="number" step="any" min="0" name="ingredient_fat[]" class="ing-nutrition" placeholder="T (g)" value="{{ item.fat if item else '' }}" title="Tłuszcz (g) dla podanej ilości">
-        <input type="number" step="any" min="0" name="ingredient_carbs[]" class="ing-nutrition" placeholder="W (g)" value="{{ item.carbs if item else '' }}" title="Węglowodany (g) dla podanej ilości">
+        <input type="text" inputmode="decimal" pattern="\d+([.,]\d+)?" name="ingredient_kcal[]" class="ing-nutrition" placeholder="kcal" value="{{ item.kcal if item else '' }}" title="Kalorie dla podanej ilości">
+        <input type="text" inputmode="decimal" pattern="\d+([.,]\d+)?" name="ingredient_protein[]" class="ing-nutrition" placeholder="B (g)" value="{{ item.protein if item else '' }}" title="Białko (g) dla podanej ilości">
+        <input type="text" inputmode="decimal" pattern="\d+([.,]\d+)?" name="ingredient_fat[]" class="ing-nutrition" placeholder="T (g)" value="{{ item.fat if item else '' }}" title="Tłuszcz (g) dla podanej ilości">
+        <input type="text" inputmode="decimal" pattern="\d+([.,]\d+)?" name="ingredient_carbs[]" class="ing-nutrition" placeholder="W (g)" value="{{ item.carbs if item else '' }}" title="Węglowodany (g) dla podanej ilości">
       </span>
       {{ move_buttons() }}
       <button type="button" class="btn-remove-row" title="Usuń składnik">&times;</button>
@@ -57,7 +57,7 @@
       <div class="rejection-notice">
         <strong>Ten przepis został odrzucony przez administratora.</strong>
         <p>Powód: {{ recipe.rejection_reason }}</p>
-        <p>Popraw przepis i zapisz — trafi ponownie do kolejki zatwierdzania.</p>
+        <p>Popraw przepis i zapisz - trafi ponownie do kolejki zatwierdzania.</p>
       </div>
     {% endif %}
 
@@ -87,7 +87,7 @@
 
       <!-- ---------- SKŁADNIKI ---------- -->
       <label>Składniki *</label>
-      <p class="field-hint">Możesz podzielić składniki na sekcje (np. „Ciasto”, „Krem”) — sekcja obejmuje wszystkie składniki pod nią, aż do następnej sekcji. Kolejność zmienisz przyciskami ▲▼. Pod każdym składnikiem możesz opcjonalnie podać kalorie/białko/tłuszcz/węglowodany <strong>dla podanej ilości</strong> (nie na 100 g) — strona przepisu zsumuje je i policzy wartości na porcję.</p>
+      <p class="field-hint">Możesz podzielić składniki na sekcje (np. „Ciasto”, „Krem”) - sekcja obejmuje wszystkie składniki pod nią, aż do następnej sekcji. Kolejność zmienisz przyciskami ▲▼. Pod każdym składnikiem możesz opcjonalnie podać kalorie/białko/tłuszcz/węglowodany <strong>dla podanej ilości</strong> (nie na 100 g) - strona przepisu zsumuje je i policzy wartości na porcję.</p>
       <div id="ingredientsWrapper" class="dynamic-rows">
         {% set ing_sections = recipe.ingredients_sections if recipe else [] %}
         {% if ing_sections %}
@@ -113,6 +113,7 @@
             <div class="step-row">
               <span class="step-number">{{ loop.index }}.</span>
               <input type="text" name="step[]" placeholder="Opisz krok…" value="{{ step }}" required>
+              {{ move_buttons() }}
               <button type="button" class="btn-remove-row" title="Usuń krok">&times;</button>
             </div>
           {% endfor %}
@@ -120,6 +121,7 @@
           <div class="step-row">
             <span class="step-number">1.</span>
             <input type="text" name="step[]" placeholder="Opisz krok…" required>
+            {{ move_buttons() }}
             <button type="button" class="btn-remove-row" title="Usuń krok">&times;</button>
           </div>
         {% endif %}
@@ -131,7 +133,7 @@
         <div>
           <label for="pan_shape">Kształt formy</label>
           <select id="pan_shape" name="pan_shape">
-            <option value="">— nie dotyczy —</option>
+            <option value="">- nie dotyczy -</option>
             {% for key, label in pan_shapes.items() %}
               <option value="{{ key }}" {{ "selected" if recipe and recipe.pan_shape == key else "" }}>{{ label }}</option>
             {% endfor %}
@@ -168,7 +170,7 @@
         <div>
           <label for="difficulty">Poziom trudności</label>
           <select id="difficulty" name="difficulty">
-            <option value="">— nie podano —</option>
+            <option value="">- nie podano -</option>
             {% for key, label in difficulties.items() %}
               <option value="{{ key }}" {{ 'selected' if recipe and recipe.difficulty == key else '' }}>{{ label }}</option>
             {% endfor %}
@@ -197,6 +199,7 @@
     <div class="step-row">
       <span class="step-number"></span>
       <input type="text" name="step[]" placeholder="Opisz krok…" required>
+      {{ move_buttons() }}
       <button type="button" class="btn-remove-row" title="Usuń krok">&times;</button>
     </div>
   </template>
@@ -331,17 +334,19 @@
       renumberSteps();
     });
 
-    // Przesuwanie i usuwanie wierszy (delegacja zdarzeń — działa też dla dodanych dynamicznie)
+    // Przesuwanie i usuwanie wierszy (delegacja zdarzeń - działa też dla dodanych dynamicznie)
     document.getElementById("recipeForm").addEventListener("click", (e) => {
       const moveBtn = e.target.closest(".btn-move-row");
       if (moveBtn) {
-        const row = moveBtn.closest(".ingredient-row, .ingredient-section-row");
+        const row = moveBtn.closest(".ingredient-row, .ingredient-section-row, .step-row");
         const dir = Number(moveBtn.dataset.dir);
         if (dir < 0 && row.previousElementSibling) {
           row.parentElement.insertBefore(row, row.previousElementSibling);
         } else if (dir > 0 && row.nextElementSibling) {
           row.parentElement.insertBefore(row.nextElementSibling, row);
         }
+        if (row.classList.contains("step-row")) renumberSteps();
+        moveBtn.focus();
         return;
       }
 

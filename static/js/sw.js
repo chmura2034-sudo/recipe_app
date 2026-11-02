@@ -1,13 +1,13 @@
 /*
- * Service worker „Szczypta Smaku" — aplikacja instalowalna (PWA) i czytanie przepisów offline.
+ * Service worker „Szczypta Smaku" - aplikacja instalowalna (PWA) i czytanie przepisów offline.
  *
  * Strategie:
- *  - strony HTML: najpierw sieć (zawsze świeża treść), a bez sieci — wersja zapisana
+ *  - strony HTML: najpierw sieć (zawsze świeża treść), a bez sieci - wersja zapisana
  *    przy ostatniej wizycie albo strona /offline. Zapisujemy tylko strony oznaczone
  *    przez serwer nagłówkiem X-Offline-Cacheable (publiczne, oglądane bez logowania),
  *    więc panel administracyjny i dane zalogowanego użytkownika nigdy nie trafiają do cache.
  *  - CSS/JS/ikony: z cache od razu, a w tle pobieramy nowszą wersję (stale-while-revalidate).
- *  - zdjęcia przepisów (/static/uploads/): z cache, a jeśli ich nie ma — z sieci.
+ *  - zdjęcia przepisów (/static/uploads/): z cache, a jeśli ich nie ma - z sieci.
  *  - wszystko poza GET (formularze, oceny, komentarze) idzie zawsze prosto do serwera.
  */
 "use strict";
@@ -38,7 +38,7 @@ const PRECACHE = [
 const NEVER_CACHE = /^\/(admin|redakcja|login|logout|konto|healthz)(\/|$)/;
 
 self.addEventListener("install", (event) => {
-  // credentials: "omit" — strony pobieramy jak anonimowy czytelnik, nawet gdy w tej
+  // credentials: "omit" - strony pobieramy jak anonimowy czytelnik, nawet gdy w tej
   // przeglądarce zalogowany jest administrator (nie zapisujemy menu ani danych panelu).
   const requests = PRECACHE.map((url) => new Request(url, { credentials: "omit" }));
   event.waitUntil(
@@ -59,7 +59,7 @@ self.addEventListener("activate", (event) => {
 async function trimCache(name, max) {
   const cache = await caches.open(name);
   const keys = await cache.keys();
-  // Klucze są w kolejności dodania — usuwamy najstarsze.
+  // Klucze są w kolejności dodania - usuwamy najstarsze.
   for (let i = 0; i < keys.length - max; i++) await cache.delete(keys[i]);
 }
 
@@ -123,7 +123,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (NEVER_CACHE.test(url.pathname)) {
-    // Tylko sieć — ale zamiast błędu przeglądarki pokazujemy stronę offline.
+    // Tylko sieć - ale zamiast błędu przeglądarki pokazujemy stronę offline.
     if (request.mode === "navigate") {
       event.respondWith(fetch(request).catch(() => caches.match("/offline").then((r) => r || Response.error())));
     }
@@ -137,7 +137,7 @@ self.addEventListener("fetch", (event) => {
   } else if (url.pathname.startsWith("/static/")) {
     event.respondWith(handleStatic(request, event));
   } else if (url.pathname.startsWith("/api/")) {
-    // API ulubionych: sieć, a offline — ostatnia odpowiedź.
+    // API ulubionych: sieć, a offline - ostatnia odpowiedź.
     event.respondWith(
       fetch(request)
         .then((response) => {

@@ -18,7 +18,7 @@
       informacje o formie, porcjach, czasie i trudności), wszystkie wpisy na blogu (razem ze
       zdjęciami wstawionymi w treść), komentarze czytelników oraz oceny przepisów w formacie JSON,
       a także kopie wszystkich zdjęć.
-      Trzymaj ten plik w bezpiecznym miejscu — np. na dysku w chmurze albo na swoim komputerze —
+      Trzymaj ten plik w bezpiecznym miejscu - np. na dysku w chmurze albo na swoim komputerze -
       poza serwerem, na którym działa aplikacja. Dzięki temu odtworzysz bazę po awarii albo
       przeniesiesz ją na nowy serwer.
     </p>
@@ -39,17 +39,17 @@
       <div class="restore-mode-options">
         <label class="restore-mode-option">
           <input type="radio" name="mode" value="merge" checked>
-          <span><strong>Uzupełnij i zaktualizuj</strong> — dopasowuje przepisy i wpisy na blogu po
+          <span><strong>Uzupełnij i zaktualizuj</strong> - dopasowuje przepisy i wpisy na blogu po
             adresie (slugu); istniejące zostają nadpisane danymi z kopii, pozostałe w bazie bez zmian.</span>
         </label>
         <label class="restore-mode-option">
           <input type="radio" name="mode" value="skip_existing">
-          <span><strong>Dodaj tylko nowe</strong> — przepisy i wpisy, które już istnieją w bazie
+          <span><strong>Dodaj tylko nowe</strong> - przepisy i wpisy, które już istnieją w bazie
             (ten sam adres/slug), zostają całkowicie pominięte i niezmienione.</span>
         </label>
         <label class="restore-mode-option restore-mode-danger">
           <input type="radio" name="mode" value="wipe">
-          <span><strong>Zastąp wszystko</strong> — usuwa WSZYSTKIE obecne przepisy, tagi i wpisy
+          <span><strong>Zastąp wszystko</strong> - usuwa WSZYSTKIE obecne przepisy, tagi i wpisy
             na blogu (razem z komentarzami i ocenami), a następnie importuje zawartość pliku od nowa.
             Starsza kopia bez wpisów na blogu nie usuwa istniejących wpisów.
             Nieodwracalne.</span>
@@ -63,18 +63,18 @@
   <section class="backup-section backup-tips">
     <h2>💡 Wskazówki</h2>
     <ul>
-      <li>Komentarze i oceny nigdy się nie dublują — import tej samej kopii kilka razy jest bezpieczny.
+      <li>Komentarze i oceny nigdy się nie dublują - import tej samej kopii kilka razy jest bezpieczny.
         W trybie „Dodaj tylko nowe” istniejące oceny zostają bez zmian, w pozostałych trybach
         są nadpisywane wartością z kopii.</li>
-      <li>Rób kopię zapasową regularnie — po większych zmianach w przepisach, a najlepiej też
+      <li>Rób kopię zapasową regularnie - po większych zmianach w przepisach, a najlepiej też
         cyklicznie (np. raz w tygodniu).</li>
-      <li>Plik ZIP jest czytelny i przenośny — możesz go otworzyć i zajrzeć do <code>recipes.json</code>,
+      <li>Plik ZIP jest czytelny i przenośny - możesz go otworzyć i zajrzeć do <code>recipes.json</code>,
         żeby zobaczyć dokładnie, co zawiera.</li>
       <li>Import w trybie „Zastąp wszystko” jest przydatny przy przenoszeniu na nowy serwer;
-        „Uzupełnij i zaktualizuj” — do bieżącej synchronizacji; „Dodaj tylko nowe” — gdy łączysz
+        „Uzupełnij i zaktualizuj” - do bieżącej synchronizacji; „Dodaj tylko nowe” - gdy łączysz
         dwie niezależnie edytowane bazy i nie chcesz nadpisać lokalnych zmian.</li>
       <li>Chcesz zautomatyzować eksport? Ten sam efekt co kliknięcie „Pobierz kopię zapasową”
-        daje zalogowane żądanie GET na adres <code>/admin/kopia-zapasowa/eksport</code> —
+        daje zalogowane żądanie GET na adres <code>/admin/kopia-zapasowa/eksport</code> -
         można to wywołać np. z zaplanowanego zadania (cron) i zapisać wynik na zewnętrznym dysku.</li>
     </ul>
   </section>

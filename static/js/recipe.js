@@ -17,7 +17,7 @@
       document.querySelectorAll("#ingredientsList li[data-ingredient-name]").forEach(function (li) {
         var amountEl = li.querySelector(".amount-value");
         items.push({
-          // Bieżąca, wyświetlana ilość — czyli po ewentualnym przeliczeniu porcji/formy.
+          // Bieżąca, wyświetlana ilość - czyli po ewentualnym przeliczeniu porcji/formy.
           amount: amountEl ? amountEl.textContent.trim() : "",
           unit: li.getAttribute("data-ingredient-unit") || "",
           name: li.getAttribute("data-ingredient-name") || "",
@@ -120,7 +120,7 @@
         osc.start(audioCtx.currentTime + offset);
         osc.stop(audioCtx.currentTime + offset + 0.3);
       });
-    } catch (e) { /* brak Web Audio — zostaje sygnał wizualny */ }
+    } catch (e) { /* brak Web Audio - zostaje sygnał wizualny */ }
     if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
   }
 
@@ -157,14 +157,14 @@
     }
 
     function tick() {
-      // Liczymy od czasu zakończenia, a nie liczbą „ticków" — przeglądarka spowalnia
+      // Liczymy od czasu zakończenia, a nie liczbą „ticków" - przeglądarka spowalnia
       // timery w kartach w tle, a minutnik ma i tak skończyć się o czasie.
       remaining = Math.max(0, Math.round((endAt - Date.now()) / 1000));
       if (remaining === 0) {
         clearInterval(interval);
         state = "done";
         beep();
-        document.title = "⏰ Krok " + stepNumber + " — gotowe!";
+        document.title = "⏰ Krok " + stepNumber + " - gotowe!";
         setTimeout(function () { document.title = originalTitle; }, 10000);
       }
       render();
@@ -172,7 +172,7 @@
 
     button.addEventListener("click", function () {
       if (audioCtx === null) {
-        // Odblokowanie dźwięku wymaga gestu użytkownika — robimy to przy pierwszym kliknięciu.
+        // Odblokowanie dźwięku wymaga gestu użytkownika - robimy to przy pierwszym kliknięciu.
         try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { audioCtx = false; }
       }
       if (state === "running") {

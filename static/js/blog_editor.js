@@ -1,7 +1,7 @@
 /*
  * Edytor wpisów na blogu: pasek formatowania (Markdown), wiele zdjęć w treści
  * (przycisk, przeciągnij-i-upuść, wklejanie ze schowka) oraz podgląd renderowany
- * przez serwer — dokładnie tak, jak wpis będzie wyglądał po publikacji.
+ * przez serwer - dokładnie tak, jak wpis będzie wyglądał po publikacji.
  *
  * Konfiguracja przez atrybuty data-* elementu [data-blog-editor]:
  *   data-upload-url  -> endpoint przyjmujący pola "images" (multipart)
@@ -27,7 +27,7 @@
   function replaceSelection(text, selectFrom, selectTo) {
     textarea.focus();
     var start = textarea.selectionStart;
-    // execCommand zachowuje cofanie w przeglądarce; gdy niedostępne — setRangeText.
+    // execCommand zachowuje cofanie w przeglądarce; gdy niedostępne - setRangeText.
     var ok = false;
     try { ok = document.execCommand("insertText", false, text); } catch (e) { ok = false; }
     if (!ok) textarea.setRangeText(text, textarea.selectionStart, textarea.selectionEnd, "end");
@@ -185,7 +185,7 @@
     })
       .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
       .then(function (json) {
-        // HTML został oczyszczony po stronie serwera (nh3) — ta sama funkcja co na stronie wpisu.
+        // HTML został oczyszczony po stronie serwera (nh3) - ta sama funkcja co na stronie wpisu.
         previewBox.innerHTML = json.html || "<p class=\"muted-info\">Brak treści.</p>";
       })
       .catch(function () { previewBox.textContent = "Nie udało się załadować podglądu."; });

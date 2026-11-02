@@ -16,7 +16,7 @@
           <a href="{{ url_for('blog_detail', slug=post.slug) }}" class="queue-item-title">{{ post.title }}</a>
           <span class="queue-item-meta">
             <span class="status-badge status-{{ post.status }}">{{ post.status_display }}</span>
-            · autor: {{ post.author.username if post.author else "—" }}
+            · autor: {{ post.author.username if post.author else "-" }}
             · {{ post.created_at.strftime('%Y-%m-%d %H:%M') }}
           </span>
           {% if post.status == "rejected" and post.rejection_reason %}

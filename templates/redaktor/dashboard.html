@@ -11,7 +11,7 @@
   </div>
 
   <p class="muted-info">
-    Twoje przepisy trafiają do kolejki zatwierdzania administratora — pojawią się publicznie
+    Twoje przepisy trafiają do kolejki zatwierdzania administratora - pojawią się publicznie
     dopiero po akceptacji. Jeśli edytujesz już opublikowany przepis, wraca on do kolejki,
     dopóki zmiany nie zostaną ponownie zatwierdzone.
   </p>
@@ -42,7 +42,7 @@
                 <div class="queue-item-description">Powód: {{ recipe.rejection_reason }}</div>
               {% endif %}
             </td>
-            <td>{{ recipe.updated_at.strftime('%Y-%m-%d %H:%M') if recipe.updated_at else '—' }}</td>
+            <td>{{ recipe.updated_at.strftime('%Y-%m-%d %H:%M') if recipe.updated_at else '-' }}</td>
             <td class="admin-table-actions">
               <a class="btn btn-small" href="{{ url_for('redaktor_recipe_edit', recipe_id=recipe.id) }}">Edytuj</a>
               {% if recipe.status != "published" %}
@@ -82,7 +82,7 @@
                 <div class="queue-item-description">Powód: {{ post.rejection_reason }}</div>
               {% endif %}
             </td>
-            <td>{{ post.updated_at.strftime('%Y-%m-%d %H:%M') if post.updated_at else '—' }}</td>
+            <td>{{ post.updated_at.strftime('%Y-%m-%d %H:%M') if post.updated_at else '-' }}</td>
             <td class="admin-table-actions">
               <a class="btn btn-small" href="{{ url_for('redaktor_blog_edit', post_id=post.id) }}">Edytuj</a>
               {% if post.status != "published" %}

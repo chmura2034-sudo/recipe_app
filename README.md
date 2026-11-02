@@ -1,8 +1,8 @@
-# Szczypta Smaku — przepisy i blog kulinarny (Flask)
+# Szczypta Smaku - przepisy i blog kulinarny (Flask)
 
 Prosta aplikacja webowa do publikowania przepisów kulinarnych.
 Każdy odwiedzający może przeglądać i wyszukiwać przepisy. Treść dodają **administrator**
-(od razu publicznie) oraz **redaktorzy** (ich przepisy czekają na zatwierdzenie —
+(od razu publicznie) oraz **redaktorzy** (ich przepisy czekają na zatwierdzenie -
 patrz sekcja „Role” niżej).
 
 ## Funkcje
@@ -11,17 +11,17 @@ patrz sekcja „Role” niżej).
 - Strona szczegółów przepisu (składniki, kroki z checklistą wykonania, forma, porcje)
 - Przeliczanie przepisu wg liczby porcji lub wielkości/kształtu formy (okrągła ↔ kwadratowa/prostokątna)
 - **Dwie role kont**: administrator (pełne prawa) i redaktor (może dodawać/edytować
-  własne przepisy, ale wymagają one zatwierdzenia przez administratora — patrz sekcja niżej)
+  własne przepisy, ale wymagają one zatwierdzenia przez administratora - patrz sekcja niżej)
 - Panel administratora z pełnym CRUD-em przepisów (zdjęcia, tagi, dynamiczne składniki i kroki)
-- **Sekcje składników** — listę składników można podzielić na sekcje o dowolnych nazwach
+- **Sekcje składników** - listę składników można podzielić na sekcje o dowolnych nazwach
   (np. „Ciasto”, „Krem”): w formularzu przycisk „+ Dodaj sekcję”, kolejność zmienia się
   przyciskami ▲▼; na stronie przepisu składniki są pogrupowane pod nagłówkami, a przeliczanie
   porcji/formy obejmuje wszystkie sekcje
-- Kopia zapasowa — eksport wszystkich przepisów i zdjęć do archiwum ZIP oraz import
+- Kopia zapasowa - eksport wszystkich przepisów i zdjęć do archiwum ZIP oraz import
   (3 tryby: uzupełnij i zaktualizuj / dodaj tylko nowe / zastąp wszystko)
 - Ochrona CSRF na wszystkich formularzach (Flask-WTF)
 - Migracje schematu bazy przez Flask-Migrate/Alembic (`flask db upgrade`)
-- Gotowe do wdrożenia produkcyjnego: gunicorn, Docker, przykłady nginx/systemd — patrz
+- Gotowe do wdrożenia produkcyjnego: gunicorn, Docker, przykłady nginx/systemd - patrz
   sekcja „Wdrożenie produkcyjne” niżej
 
 ## Instalacja (praca lokalna)
@@ -38,7 +38,7 @@ pip install -r requirements.txt
 echo "APP_ENV=development" > .env
 # (tryb development nie wymaga SECRET_KEY i działa po zwykłym http://;
 #  bez tego aplikacja domyślnie startuje w trybie PRODUCTION i odmówi
-#  uruchomienia bez poprawnego SECRET_KEY — patrz sekcja "Bezpieczeństwo")
+#  uruchomienia bez poprawnego SECRET_KEY - patrz sekcja "Bezpieczeństwo")
 
 export FLASK_APP=app.py         # Windows (PowerShell): $env:FLASK_APP="app.py"
 
@@ -54,7 +54,7 @@ flask run
 
 Aplikacja będzie dostępna pod adresem `http://127.0.0.1:5000`.
 
-Serwer wbudowany we Flaska (`flask run` / `python app.py`) jest tylko do pracy lokalnej —
+Serwer wbudowany we Flaska (`flask run` / `python app.py`) jest tylko do pracy lokalnej -
 jednowątkowy, bez obsługi wielu równoczesnych połączeń. Do wdrożenia patrz sekcja
 „Wdrożenie produkcyjne” niżej.
 
@@ -67,12 +67,12 @@ do repozytorium (patrz `.gitignore`). Najważniejsze zmienne:
 | Zmienna                  | Opis                                                                 | Domyślnie (production) |
 |---------------------------|-----------------------------------------------------------------------|--------------------------|
 | `APP_ENV`                 | `production` (bezpieczne, wymaga sekretów) albo `development`        | `production`             |
-| `SECRET_KEY`               | Klucz sesji/CSRF. **Wymagany** na produkcji, min. 32 znaki            | *(brak — aplikacja nie wystartuje)* |
+| `SECRET_KEY`               | Klucz sesji/CSRF. **Wymagany** na produkcji, min. 32 znaki            | *(brak - aplikacja nie wystartuje)* |
 | `DATABASE_URL`             | Connection string bazy danych                                        | plik SQLite `recipes.db` |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Domyślne dane dla `flask create-admin` (bez podania opcji)   | —                         |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Domyślne dane dla `flask create-admin` (bez podania opcji)   | -                         |
 | `PROXY_COUNT`              | Liczba serwerów proxy PRZED aplikacją (nginx, Cloudflare Tunnel...)   | `0`                       |
 | `SESSION_COOKIE_SECURE`    | Ciasteczko sesji tylko po HTTPS                                       | `true`                    |
-| `RATELIMIT_STORAGE_URI`    | Magazyn liczników limitu logowań — `redis://...` przy kilku workerach | `memory://` (1 proces)    |
+| `RATELIMIT_STORAGE_URI`    | Magazyn liczników limitu logowań - `redis://...` przy kilku workerach | `memory://` (1 proces)    |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` | Próg i czas blokady konta po nieudanych logowaniach | `5` / `15`                |
 | `MAX_UPLOAD_MB`            | Limit rozmiaru przesyłanego pliku (zdjęcia)                            | `8`                       |
 | `BACKUP_MAX_UNCOMPRESSED_MB` | Limit rozpakowanego rozmiaru importowanej kopii zapasowej            | `300`                     |
@@ -118,15 +118,15 @@ recipe_app/
 
 ## Role: administrator i redaktor
 
-- **Administrator** — pełne prawa: dodaje, edytuje i usuwa dowolny przepis; przepisy dodane
+- **Administrator** - pełne prawa: dodaje, edytuje i usuwa dowolny przepis; przepisy dodane
   lub zaakceptowane przez admina są od razu publiczne.
-- **Redaktor** — może tworzyć własne przepisy i je edytować, ale każda nowa treść
+- **Redaktor** - może tworzyć własne przepisy i je edytować, ale każda nowa treść
   (nowy przepis albo zmiana w już opublikowanym) trafia do **kolejki zatwierdzania**
   (`/admin/kolejka`) i staje się publicznie widoczna dopiero, gdy administrator ją zaakceptuje.
-  Administrator może też odrzucić przepis z podaniem powodu — redaktor zobaczy go
+  Administrator może też odrzucić przepis z podaniem powodu - redaktor zobaczy go
   na swoim koncie (`/redakcja`) i może poprawić przepis, co wysyła go ponownie do zatwierdzenia.
 
-Konta redaktorów zakłada administrator — nie ma samodzielnej rejestracji. Można to zrobić
+Konta redaktorów zakłada administrator - nie ma samodzielnej rejestracji. Można to zrobić
 z poziomu panelu (`/admin/redaktorzy`) albo z linii poleceń:
 
 ```bash
@@ -142,26 +142,26 @@ Panel administratora (`/admin/kopia-zapasowa`) pozwala:
 
 - **Eksportować** wszystkie przepisy do jednego pliku `.zip` zawierającego `recipes.json`
   (tytuły, składniki, kroki, tagi, forma, porcje) oraz folder `images/` ze zdjęciami potraw.
-  Ten format jest przenośny i niezależny od silnika bazy danych — działa niezależnie od tego,
+  Ten format jest przenośny i niezależny od silnika bazy danych - działa niezależnie od tego,
   czy używasz SQLite czy np. PostgreSQL przez `DATABASE_URL`.
 - **Importować** wcześniej pobrane archiwum w jednym z trzech trybów:
-  - *Uzupełnij i zaktualizuj* — dopasowuje przepisy po tytule/slugu; istniejące nadpisuje danymi z kopii
-  - *Dodaj tylko nowe* — pomija przepisy, które już są w bazie
-  - *Zastąp wszystko* — usuwa wszystkie obecne przepisy i tagi, potem importuje od zera (nieodwracalne)
+  - *Uzupełnij i zaktualizuj* - dopasowuje przepisy po tytule/slugu; istniejące nadpisuje danymi z kopii
+  - *Dodaj tylko nowe* - pomija przepisy, które już są w bazie
+  - *Zastąp wszystko* - usuwa wszystkie obecne przepisy i tagi, potem importuje od zera (nieodwracalne)
 
 ### Zalecana praktyka
 
 Regularnie pobieraj kopię zapasową i trzymaj ją **poza serwerem** (dysk w chmurze, backup lokalny).
 Z poziomu przeglądarki służy do tego przycisk na `/admin/kopia-zapasowa`; do automatyzacji
-(np. przez `cron`) użyj polecenia `flask export-backup` — patrz sekcja „Wdrożenie produkcyjne”.
+(np. przez `cron`) użyj polecenia `flask export-backup` - patrz sekcja „Wdrożenie produkcyjne”.
 
 Uwaga: import nie usuwa automatycznie plików zdjęć osieroconych po trybie „Zastąp wszystko”
-(stare pliki zostają na dysku w `static/uploads/`, ale nie są już z niczym powiązane) —
+(stare pliki zostają na dysku w `static/uploads/`, ale nie są już z niczym powiązane) -
 to świadome uproszczenie, które nie wpływa na poprawność działania aplikacji.
 
 ## Migracje bazy danych
 
-Schemat bazy tworzą i aktualizują migracje Alembic (Flask-Migrate) — **nie** `db.create_all()`.
+Schemat bazy tworzą i aktualizują migracje Alembic (Flask-Migrate) - **nie** `db.create_all()`.
 Aktualny schemat (role użytkowników, kolejka zatwierdzania, blokada logowania, tagi, sekcje
 składników itd.) jest w całości opisany w `migrations/versions/`.
 
@@ -178,7 +178,7 @@ flask db migrate -m "opis zmiany"   # generuje plik w migrations/versions/
 flask db upgrade                     # stosuje go do bazy
 ```
 
-Zawsze **przejrzyj** wygenerowany plik przed uruchomieniem — Alembic dobrze radzi sobie
+Zawsze **przejrzyj** wygenerowany plik przed uruchomieniem - Alembic dobrze radzi sobie
 z nowymi kolumnami, ale np. zmiany wymagające wypełnienia danych albo przenoszenia wartości
 między kolumnami trzeba dopisać ręcznie.
 
@@ -186,50 +186,50 @@ między kolumnami trzeba dopisać ręcznie.
 
 Aplikacja zawiera kilka wbudowanych zabezpieczeń:
 
-- **SQL injection** — wszystkie zapytania do bazy idą przez ORM SQLAlchemy
+- **SQL injection** - wszystkie zapytania do bazy idą przez ORM SQLAlchemy
   (`Recipe.query.filter(...)`, `.filter_by(...)`, `.ilike(...)` itd.), które zawsze wiąże
   wartości jako parametry, nigdy nie buduje zapytań przez sklejanie surowych stringów SQL.
   W kodzie nie ma ani jednego wywołania `db.session.execute(text(f"..."))` z wartością
   użytkownika wklejoną bezpośrednio w zapytanie.
-- **XSS (Cross-Site Scripting)** — Jinja2 domyślnie escapuje wszystko, co wypisujesz przez
+- **XSS (Cross-Site Scripting)** - Jinja2 domyślnie escapuje wszystko, co wypisujesz przez
   `{{ ... }}` (tytuły, opisy, składniki, tagi, komentarze administratora itd.); w żadnym
   szablonie nie użyto filtra `|safe` ani `{% autoescape false %}`, które mogłyby to wyłączyć.
   Dodatkowo `Content-Security-Policy` na każdej odpowiedzi dopuszcza skrypty wyłącznie
-  z własnej domeny (`script-src 'self' 'nonce-...'`, losowy nonce inny dla każdego żądania) —
+  z własnej domeny (`script-src 'self' 'nonce-...'`, losowy nonce inny dla każdego żądania) -
   bez `'unsafe-inline'`, więc wstrzyknięty przez atak `<script>` albo `onclick="..."`
   nie wykona się nawet, gdyby autoescaping zawiódł. W szablonach nie ma ani jednego
-  inline'owego `onclick=`/`onsubmit=` — zamiast tego mały, wspólny plik
+  inline'owego `onclick=`/`onsubmit=` - zamiast tego mały, wspólny plik
   `static/js/app.js` obsługuje potwierdzenia usuwania (`data-confirm="..."`) i
   rozwijanie/zwijanie elementów (`data-toggle-target="..."`) na podstawie atrybutów
   `data-*`, czyli danych, a nie kodu.
-- **Bezpieczne przekierowania po logowaniu** — parametr `?next=` jest sprawdzany
+- **Bezpieczne przekierowania po logowaniu** - parametr `?next=` jest sprawdzany
   (`is_safe_redirect_target` w `app.py`) i akceptowany tylko, gdy wskazuje na ścieżkę
   wewnątrz tej samej aplikacji; próba przekierowania na obcą domenę (`https://zla-strona.pl`)
-  albo adres protokołowo-względny (`//zla-strona.pl`) jest odrzucana — chroni to przed
+  albo adres protokołowo-względny (`//zla-strona.pl`) jest odrzucana - chroni to przed
   wykorzystaniem linku do logowania jako narzędzia phishingu.
-- **Ochrona przed atakiem czasowym (timing attack) i wyliczaniem kont** — logowanie na
+- **Ochrona przed atakiem czasowym (timing attack) i wyliczaniem kont** - logowanie na
   nieistniejące konto wykonuje dokładnie tak samo kosztowne, fikcyjne sprawdzenie hasła
   (`_DUMMY_PASSWORD_HASH`) jak logowanie na istniejące konto ze złym hasłem, więc czas
   odpowiedzi serwera nie zdradza, czy dana nazwa użytkownika w ogóle istnieje w bazie.
   Komunikat błędu jest identyczny we wszystkich przypadkach (zły login, złe hasło,
   zablokowane konto).
-- **Wylogowanie tylko przez POST** (z tokenem CSRF) — obca strona nie może wylogować
+- **Wylogowanie tylko przez POST** (z tokenem CSRF) - obca strona nie może wylogować
   użytkownika samym linkiem czy obrazkiem (`<img src="/logout">`); GET na `/logout`
   zwraca teraz 405.
-- **Za reverse proxy** (`PROXY_COUNT` w `.env`) — nagłówki `X-Forwarded-For`/`X-Forwarded-Proto`
+- **Za reverse proxy** (`PROXY_COUNT` w `.env`) - nagłówki `X-Forwarded-For`/`X-Forwarded-Proto`
   są zaufane tylko wtedy, gdy faktycznie skonfigurowano tyle serwerów proxy przed aplikacją.
-  Przy `PROXY_COUNT=0` (domyślnie) są całkowicie ignorowane — inaczej ktokolwiek mógłby
+  Przy `PROXY_COUNT=0` (domyślnie) są całkowicie ignorowane - inaczej ktokolwiek mógłby
   wysłać własny nagłówek `X-Forwarded-For` i podszyć się pod inny adres IP, omijając
   limit prób logowania per IP.
-- **Import kopii zapasowej odporny na „zip bombę”** — przed rozpakowaniem sprawdzana jest
+- **Import kopii zapasowej odporny na „zip bombę”** - przed rozpakowaniem sprawdzana jest
   liczba wpisów w archiwum i łączny rozmiar po rozpakowaniu (`BACKUP_MAX_ENTRIES`,
   `BACKUP_MAX_UNCOMPRESSED_MB`); archiwum przekraczające limity jest odrzucane, zanim
   cokolwiek trafi na dysk.
-- **Silne hasła wymuszone także w CLI** — `flask create-admin` / `flask create-redaktor`
+- **Silne hasła wymuszone także w CLI** - `flask create-admin` / `flask create-redaktor`
   i tworzenie redaktora z panelu administratora odrzucają hasła krótsze niż
   `MIN_PASSWORD_LENGTH` (domyślnie 10 znaków) oraz z listy popularnych, słabych haseł
   (`WEAK_PASSWORDS` w `app.py`).
-- **Sanityzacja przesyłanych zdjęć** — każdy wgrywany albo wklejany obrazek (a także
+- **Sanityzacja przesyłanych zdjęć** - każdy wgrywany albo wklejany obrazek (a także
   zdjęcia z importowanej kopii zapasowej) jest w całości dekodowany i **ponownie zapisywany
   od zera przez Pillow** (`_sanitize_and_save_image` w `app.py`), zamiast ufać rozszerzeniu
   pliku czy deklarowanemu typowi MIME. Dzięki temu:
@@ -239,21 +239,21 @@ Aplikacja zawiera kilka wbudowanych zabezpieczeń:
   - usuwane są wszelkie dane doklejone do pliku poza właściwą treścią obrazu,
   - obrazy o podejrzanie dużej liczbie pikseli („bomby dekompresji”) są odrzucane,
     a zwykłe duże zdjęcia proporcjonalnie zmniejszane (`MAX_IMAGE_DIMENSION` w `config.py`),
-  - plik zapisywany jest pod nową, losową nazwą (UUID) — nazwa nadana przez użytkownika
+  - plik zapisywany jest pod nową, losową nazwą (UUID) - nazwa nadana przez użytkownika
     nigdy nie trafia na dysk ani do adresu URL.
   Limit rozmiaru przesyłanego pliku (`MAX_CONTENT_LENGTH`, domyślnie 8 MB) chroni dodatkowo
   przed zapychaniem serwera bardzo dużymi plikami.
-- **Limit prób logowania** — dwie niezależne warstwy ochrony przed atakiem brute-force:
+- **Limit prób logowania** - dwie niezależne warstwy ochrony przed atakiem brute-force:
   - limit na poziomie adresu IP przez Flask-Limiter (`LOGIN_RATE_LIMIT` w `config.py`,
     domyślnie 10 prób/minutę i 30/godzinę na jeden adres IP, niezależnie od loginu),
   - blokada konkretnego konta na `LOGIN_LOCKOUT_MINUTES` minut po `LOGIN_MAX_ATTEMPTS`
-    nieudanych próbach z rzędu (domyślnie: blokada na 15 minut po 5 próbach) —
+    nieudanych próbach z rzędu (domyślnie: blokada na 15 minut po 5 próbach) -
     licznik zeruje się po udanym logowaniu.
   Komunikat błędu logowania jest zawsze taki sam niezależnie od tego, czy podana nazwa
-  użytkownika w ogóle istnieje w bazie — utrudnia to atakującemu sprawdzanie, które konta
+  użytkownika w ogóle istnieje w bazie - utrudnia to atakującemu sprawdzanie, które konta
   są zarejestrowane (tzw. ochrona przed username enumeration). Blokada konta to świadomy
   kompromis: ktoś obcy, znając Twój login, może Cię czasowo zablokować, celowo podając
-  złe hasło 5 razy — w takiej sytuacji odblokuj konto natychmiast poleceniem
+  złe hasło 5 razy - w takiej sytuacji odblokuj konto natychmiast poleceniem
   `flask unlock-user --username nazwa`, bez czekania na upływ `LOGIN_LOCKOUT_MINUTES`.
 
 ## Wdrożenie produkcyjne (stawianie serwera)
@@ -306,11 +306,11 @@ sudo git clone <adres-repozytorium> /opt/recipe-app
 sudo chown -R $USER:$USER /opt/recipe-app
 cd /opt/recipe-app
 
-# Wygeneruj klucz sesji (min. 32 znaki — bez niego aplikacja odmówi startu)
+# Wygeneruj klucz sesji (min. 32 znaki - bez niego aplikacja odmówi startu)
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-Utwórz `/opt/recipe-app/.env` (np. `nano .env`) — minimalna konfiguracja produkcyjna:
+Utwórz `/opt/recipe-app/.env` (np. `nano .env`) - minimalna konfiguracja produkcyjna:
 
 ```ini
 APP_ENV=production
@@ -327,12 +327,12 @@ ADMIN_USERNAME=admin
 chmod 600 .env     # w opcji B uprawnienia poprawimy w kroku B3
 ```
 
-Pełna lista zmiennych — patrz sekcja „Zmienne środowiskowe” wyżej.
+Pełna lista zmiennych - patrz sekcja „Zmienne środowiskowe” wyżej.
 
 ### Krok 3: Certyfikat SSL (Let's Encrypt)
 
 Wystawiamy certyfikat **przed** skonfigurowaniem nginx, bo przykładowy `deploy/nginx.conf.example`
-odwołuje się do plików certyfikatu — bez nich `nginx -t` zgłosi błąd. Certbot w trybie
+odwołuje się do plików certyfikatu - bez nich `nginx -t` zgłosi błąd. Certbot w trybie
 `standalone` potrzebuje na chwilę wolnego portu 80, stąd zatrzymanie nginx; hooki sprawiają,
 że automatyczne odnawianie (timer `certbot.timer`) zrobi to samo bez Twojego udziału.
 
@@ -366,7 +366,7 @@ nano docker-compose.yml
 
 W `docker-compose.yml` zmień mapowanie portu na `"127.0.0.1:8000:8000"` (zamiast `"8000:8000"`).
 To ważne: Docker sam dopisuje reguły iptables i **omija `ufw`**, więc bez tego gunicorn
-byłby dostępny z internetu po zwykłym HTTP. Usuń też z `.env` linię `DATABASE_URL` —
+byłby dostępny z internetu po zwykłym HTTP. Usuń też z `.env` linię `DATABASE_URL` -
 w kontenerze ustawia ją `docker-compose.yml` (`sqlite:////data/recipes.db`).
 
 **A3. Budowa, migracje, konto admina, start:**
@@ -386,9 +386,9 @@ Baza SQLite i przesłane zdjęcia żyją w nazwanych wolumenach Dockera (`db-dat
 uprawnień roota i ma `HEALTHCHECK` na `/healthz`. Migracje **nie** uruchamiają się same
 przy starcie kontenera.
 
-**A4. nginx** — tak jak w kroku B5 niżej, z jedną zmianą: **usuń** z konfiguracji blok
+**A4. nginx** - tak jak w kroku B5 niżej, z jedną zmianą: **usuń** z konfiguracji blok
 `location /static/ { ... }`. Pliki statyczne i zdjęcia są wewnątrz kontenera/wolumenu,
-a nie w `/opt/recipe-app/static/` na hoście — gunicorn serwuje je sam.
+a nie w `/opt/recipe-app/static/` na hoście - gunicorn serwuje je sam.
 
 **Aktualizacja do nowej wersji:**
 
@@ -425,11 +425,11 @@ sudo chown -R www-data:www-data data instance static/uploads
 ```
 
 Baza leży w osobnym katalogu `data/` (patrz `DATABASE_URL` w `.env`), bo aplikacja włącza
-w SQLite tryb WAL — obok `recipes.db` muszą móc powstać pliki `recipes.db-wal` i
+w SQLite tryb WAL - obok `recipes.db` muszą móc powstać pliki `recipes.db-wal` i
 `recipes.db-shm`. Jednostka systemd ma `ProtectSystem=strict`, czyli zapisywać można tylko
 w katalogach z `ReadWritePaths`; samo `recipes.db` w katalogu projektu nie wystarczy.
 
-**B3. Uprawnienia `.env`** — aplikacja (jako `www-data`) też czyta ten plik:
+**B3. Uprawnienia `.env`** - aplikacja (jako `www-data`) też czyta ten plik:
 
 ```bash
 sudo chown $USER:www-data .env
@@ -457,7 +457,7 @@ W pliku zamień linię `ReadWritePaths=` na:
 ReadWritePaths=/opt/recipe-app/data /opt/recipe-app/static/uploads /opt/recipe-app/instance
 ```
 
-(wszystkie trzy katalogi muszą istnieć — inaczej systemd nie uruchomi usługi). Jeśli
+(wszystkie trzy katalogi muszą istnieć - inaczej systemd nie uruchomi usługi). Jeśli
 zmieniłeś ścieżkę instalacji albo użytkownika, popraw też `WorkingDirectory`,
 `EnvironmentFile`, `ExecStart` i `User`/`Group`.
 
@@ -479,7 +479,7 @@ sudo nginx -t && sudo systemctl reload nginx
 ```
 
 `client_max_body_size` w konfiguracji nginx musi być nieco większy niż `MAX_UPLOAD_MB`
-z `.env` — inaczej duże zdjęcia skończą się błędem 413.
+z `.env` - inaczej duże zdjęcia skończą się błędem 413.
 
 **Aktualizacja do nowej wersji:**
 
@@ -493,7 +493,7 @@ sudo systemctl restart recipe-app
 
 Logi: `journalctl -u recipe-app -f` (aplikacja/gunicorn), `/var/log/nginx/error.log` (nginx).
 
-`wsgi.py` to punkt wejścia dla gunicorna (`gunicorn wsgi:app`) — patrz komentarz w pliku.
+`wsgi.py` to punkt wejścia dla gunicorna (`gunicorn wsgi:app`) - patrz komentarz w pliku.
 
 ---
 
@@ -501,7 +501,7 @@ Logi: `journalctl -u recipe-app -f` (aplikacja/gunicorn), `/var/log/nginx/error.
 
 Układ: **VPS1** (publiczny, „brzegowy”) ma nginx i certyfikat SSL; **VPS2** (backend)
 uruchamia aplikację, która nasłuchuje tylko w tunelu (`10.10.10.2:8000`) i nie jest widoczna
-z internetu. To tunel punkt-do-punktu, nie pełny VPN — szczegóły w komentarzach plików
+z internetu. To tunel punkt-do-punktu, nie pełny VPN - szczegóły w komentarzach plików
 `deploy/wireguard/*.conf.example`.
 
 **C1. WireGuard na obu serwerach:**
@@ -519,21 +519,21 @@ sudo systemctl enable --now wg-quick@wg0
 Na VPS1 otwórz port tunelu: `sudo ufw allow 51820/udp`. Sprawdź połączenie:
 `ping 10.10.10.2` z VPS1 i `sudo wg show` (powinien być widoczny „latest handshake”).
 
-**C2. Aplikacja na VPS2** — kroki 1–2 oraz opcja A albo B, z tymi różnicami:
+**C2. Aplikacja na VPS2** - kroki 1–2 oraz opcja A albo B, z tymi różnicami:
 
 - nginx i certyfikat **nie** są potrzebne na VPS2,
 - opcja B: w `ExecStart` jednostki systemd zmień `--bind 127.0.0.1:8000` na
   `--bind 10.10.10.2:8000`, a w sekcji `[Unit]` dopisz `After=wg-quick@wg0.service` i
   `Requires=wg-quick@wg0.service` (adres tunelu musi istnieć przed startem gunicorna),
 - opcja A: mapowanie portu w `docker-compose.yml` ustaw na `"10.10.10.2:8000:8000"`,
-- zapora na VPS2 — port aplikacji tylko z tunelu:
+- zapora na VPS2 - port aplikacji tylko z tunelu:
   `sudo ufw allow in on wg0 to any port 8000 proto tcp`,
 - `PROXY_COUNT=1` (jedynym proxy jest nginx na VPS1).
 
-**C3. nginx na VPS1** — krok 3 (certyfikat) i krok B6, ale w konfiguracji nginx:
+**C3. nginx na VPS1** - krok 3 (certyfikat) i krok B6, ale w konfiguracji nginx:
 
 - `proxy_pass http://10.10.10.2:8000;` zamiast `http://127.0.0.1:8000`,
-- **usuń** blok `location /static/ { ... }` — pliki statyczne są na VPS2.
+- **usuń** blok `location /static/ { ... }` - pliki statyczne są na VPS2.
 
 Test z VPS1: `curl http://10.10.10.2:8000/healthz`.
 
@@ -566,16 +566,16 @@ Opcja A (crontab Twojego użytkownika, należącego do grupy `docker`):
 ```
 
 `flask export-backup` działa bez przeglądarki/sesji i zapisuje plik z uprawnieniami `600`
-(czytelny tylko dla właściciela) — patrz sekcja „Kopia zapasowa przepisów” wyżej.
+(czytelny tylko dla właściciela) - patrz sekcja „Kopia zapasowa przepisów” wyżej.
 Kopie regularnie przenoś **poza serwer** (np. `rsync`/`rclone` do chmury).
 
 ### Najczęstsze problemy
 
 | Objaw | Przyczyna i rozwiązanie |
 |-------|--------------------------|
-| Usługa/kontener nie startuje, w logu „Odmowa startu — niebezpieczna konfiguracja” | Brak lub za krótki `SECRET_KEY` w `.env` (min. 32 znaki). |
-| `502 Bad Gateway` z nginx | Gunicorn nie działa albo słucha na innym adresie — `systemctl status recipe-app` / `docker compose ps`, sprawdź `curl` na `/healthz` lokalnie. |
-| Logowanie „nie działa” (wraca na stronę logowania), błąd CSRF | Strona otwarta po zwykłym `http://` — ciasteczko sesji jest tylko dla HTTPS. Wejdź przez `https://` i sprawdź `PROXY_COUNT=1`. |
+| Usługa/kontener nie startuje, w logu „Odmowa startu - niebezpieczna konfiguracja” | Brak lub za krótki `SECRET_KEY` w `.env` (min. 32 znaki). |
+| `502 Bad Gateway` z nginx | Gunicorn nie działa albo słucha na innym adresie - `systemctl status recipe-app` / `docker compose ps`, sprawdź `curl` na `/healthz` lokalnie. |
+| Logowanie „nie działa” (wraca na stronę logowania), błąd CSRF | Strona otwarta po zwykłym `http://` - ciasteczko sesji jest tylko dla HTTPS. Wejdź przez `https://` i sprawdź `PROXY_COUNT=1`. |
 | `attempt to write a readonly database` / `unable to open database file` | Katalog z bazą nie należy do `www-data` albo nie ma go w `ReadWritePaths` (krok B2 i B5). |
 | Błąd przy zapisie zdjęcia | `static/uploads` nie należy do `www-data` / brak w `ReadWritePaths`. |
 | `413 Request Entity Too Large` | Zwiększ `client_max_body_size` w nginx (powyżej `MAX_UPLOAD_MB`). |
@@ -584,16 +584,16 @@ Kopie regularnie przenoś **poza serwer** (np. `rsync`/`rclone` do chmury).
 ### Lista kontrolna przed pierwszym uruchomieniem na produkcji
 
 - [ ] `SECRET_KEY` wygenerowany (`python3 -c "import secrets; print(secrets.token_hex(32))"`)
-      i ustawiony w `.env` — bez tego aplikacja **odmówi startu** (patrz `validate_production_config`).
-- [ ] `APP_ENV=production` (domyślne — po prostu nie ustawiaj `development` na serwerze).
+      i ustawiony w `.env` - bez tego aplikacja **odmówi startu** (patrz `validate_production_config`).
+- [ ] `APP_ENV=production` (domyślne - po prostu nie ustawiaj `development` na serwerze).
 - [ ] Aplikacja dostępna wyłącznie przez HTTPS (nginx + certyfikat); `SESSION_COOKIE_SECURE`
       zostaje na `true` (domyślne w production).
 - [ ] Port `8000` niedostępny z internetu (bind na `127.0.0.1` / adres tunelu; w Dockerze
       mapowanie `127.0.0.1:8000:8000`, bo Docker omija `ufw`).
 - [ ] `PROXY_COUNT` ustawiony na dokładną liczbę serwerów proxy przed aplikacją (zwykle `1`
-      dla pojedynczego nginx) — źle ustawiony psuje limit logowań per IP i wykrywanie HTTPS.
+      dla pojedynczego nginx) - źle ustawiony psuje limit logowań per IP i wykrywanie HTTPS.
 - [ ] Hasło administratora nadane przy `flask create-admin` jest unikalne i silne
-      (min. 10 znaków, nie z listy popularnych — wymuszane automatycznie).
+      (min. 10 znaków, nie z listy popularnych - wymuszane automatycznie).
 - [ ] Migracje zastosowane (`flask db upgrade`) **przed** pierwszym uruchomieniem gunicorna
       i po każdej aktualizacji kodu.
 - [ ] Kopie zapasowe skonfigurowane (cron + `flask export-backup`) i trzymane **poza** serwerem.

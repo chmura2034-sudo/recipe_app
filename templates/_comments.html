@@ -1,4 +1,4 @@
-{# Sekcja komentarzy — dołączana pod przepisem i wpisem na blogu.
+{# Sekcja komentarzy - dołączana pod przepisem i wpisem na blogu.
    Wymaga zmiennych: comments, comment_action (URL formularza), can_comment,
    comment_form_ts, comment_name_max, comment_content_max. #}
 <section class="comments-section" id="komentarze">
@@ -22,7 +22,7 @@
               </form>
             {% endif %}
           </div>
-          {# Czysty tekst — Jinja escapuje HTML; nowe linie zachowuje CSS (white-space: pre-line). #}
+          {# Czysty tekst - Jinja escapuje HTML; nowe linie zachowuje CSS (white-space: pre-line). #}
           <p class="comment-content">{{ comment.content }}</p>
         </li>
       {% endfor %}
@@ -36,7 +36,7 @@
       <h3>Dodaj komentarz</h3>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="form_ts" value="{{ comment_form_ts }}">
-      {# Pułapka na boty — ludzie tego pola nie widzą i go nie wypełniają. #}
+      {# Pułapka na boty - ludzie tego pola nie widzą i go nie wypełniają. #}
       <div class="hp-field" aria-hidden="true">
         <label for="website">Nie wypełniaj tego pola</label>
         <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">

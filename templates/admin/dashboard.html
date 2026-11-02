@@ -36,7 +36,7 @@
         {% for recipe in recipes %}
           <tr>
             <td><a href="{{ url_for('recipe_detail', slug=recipe.slug) }}">{{ recipe.title }}</a></td>
-            <td>{{ recipe.author.username if recipe.author else "—" }}</td>
+            <td>{{ recipe.author.username if recipe.author else "-" }}</td>
             <td><span class="status-badge status-{{ recipe.status }}">{{ recipe.status_display }}</span></td>
             <td>{{ recipe.created_at.strftime('%Y-%m-%d') }}</td>
             <td class="admin-table-actions">

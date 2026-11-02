@@ -150,7 +150,7 @@ class Recipe(db.Model):
         """
         Zwraca listę sekcji składników: [{"name": "Ciasto"|None, "items": [...]}, ...].
         "name" to None dla składników nienależących do żadnej nazwanej sekcji
-        (czyli zwykła, niepodzielona lista — najczęstszy przypadek).
+        (czyli zwykła, niepodzielona lista - najczęstszy przypadek).
         """
         sections = []
         current = {"name": None, "items": []}
@@ -198,7 +198,7 @@ class Recipe(db.Model):
 
     @property
     def ingredients_list(self):
-        """Płaska lista {amount, unit, name} ze wszystkich sekcji — dla kodu, któremu
+        """Płaska lista {amount, unit, name} ze wszystkich sekcji - dla kodu, któremu
         podział na sekcje jest obojętny (np. eksport do starszego formatu kopii zapasowej)."""
         return [item for section in self.ingredients_sections for item in section["items"]]
 
@@ -219,7 +219,7 @@ class Recipe(db.Model):
         """
         Suma kcal/białka/tłuszczu/węglowodanów ze wszystkich składników, które mają
         podaną choć jedną wartość liczbową. Brakujące/nieliczbowe pola są pomijane
-        (nie liczone jako 0) — suma więc zawsze jest przynajmniej tak duża, jak dane
+        (nie liczone jako 0) - suma więc zawsze jest przynajmniej tak duża, jak dane
         pozwalają, a `has_data` mówi, czy w ogóle jest co sumować.
         """
         totals = {"kcal": 0.0, "protein": 0.0, "fat": 0.0, "carbs": 0.0}
@@ -338,7 +338,7 @@ def blog_markdown_to_plain_text(text: str) -> str:
     """Treść wpisu bez formatowania (np. do automatycznej zajawki na liście wpisów)."""
     html = render_blog_markdown(text).replace("</p>", " </p>").replace("<br>", " ")
     plain = nh3.clean(html, tags=set())
-    # nh3 zostawia encje HTML (&amp; itp.) — Jinja i tak escapuje tekst, więc je odkodowujemy.
+    # nh3 zostawia encje HTML (&amp; itp.) - Jinja i tak escapuje tekst, więc je odkodowujemy.
     from html import unescape
 
     return " ".join(unescape(plain).split())
@@ -352,7 +352,7 @@ class BlogPost(db.Model):
 
     Treść zapisywana jest w Markdownie (pogrubienia, nagłówki, listy, linki, zdjęcia).
     Na stronę trafia wyłącznie przez render_blog_markdown(), który usuwa wszelki
-    niedozwolony HTML — wpis nie może wstrzyknąć skryptu do strony.
+    niedozwolony HTML - wpis nie może wstrzyknąć skryptu do strony.
     """
 
     __tablename__ = "blog_posts"
@@ -369,7 +369,7 @@ class BlogPost(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    # Data pierwszej publikacji — według niej sortujemy listę wpisów na blogu.
+    # Data pierwszej publikacji - według niej sortujemy listę wpisów na blogu.
     published_at = db.Column(db.DateTime, index=True)
 
     author_id = db.Column(db.Integer, db.ForeignKey("users.id"))
@@ -377,7 +377,7 @@ class BlogPost(db.Model):
 
     @property
     def content_html(self):
-        """Treść wyrenderowana z Markdownu i oczyszczona — bezpieczna do wyświetlenia."""
+        """Treść wyrenderowana z Markdownu i oczyszczona - bezpieczna do wyświetlenia."""
         return render_blog_markdown(self.content)
 
     @property
@@ -421,10 +421,10 @@ class Comment(db.Model):
     """
     Komentarz czytelnika pod przepisem ALBO wpisem na blogu (dokładnie jedno z dwóch).
 
-    Czytelnicy nie mają kont — podają tylko pseudonim. Treść to czysty tekst
+    Czytelnicy nie mają kont - podają tylko pseudonim. Treść to czysty tekst
     (Jinja ją escapuje), bez HTML ani Markdownu. Nowe komentarze mają status
     "pending" i pojawiają się publicznie dopiero po zatwierdzeniu przez administratora.
-    Zamiast adresu IP przechowujemy jego HMAC (voter_hash) — wystarcza do wykrywania
+    Zamiast adresu IP przechowujemy jego HMAC (voter_hash) - wystarcza do wykrywania
     spamu, a nie jest daną osobową w surowej postaci.
     """
 
@@ -498,9 +498,9 @@ class RecipeRating(db.Model):
 
 class DailyView(db.Model):
     """
-    Licznik wyświetleń strony przepisu / wpisu na blogu w danym dniu — własne, proste
+    Licznik wyświetleń strony przepisu / wpisu na blogu w danym dniu - własne, proste
     statystyki bez zewnętrznej analityki (bez ciasteczek śledzących i bez baneru RODO).
-    Nie zapisujemy, KTO oglądał — tylko ile razy.
+    Nie zapisujemy, KTO oglądał - tylko ile razy.
     """
 
     __tablename__ = "daily_views"

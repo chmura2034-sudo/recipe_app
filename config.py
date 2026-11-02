@@ -51,7 +51,7 @@ class Config:
 
     APP_ENV = "production"
 
-    # Wymagany na produkcji (min. 32 znaki) — wygeneruj: python -c "import secrets; print(secrets.token_hex(32))"
+    # Wymagany na produkcji (min. 32 znaki) - wygeneruj: python -c "import secrets; print(secrets.token_hex(32))"
     SECRET_KEY = os.environ.get("SECRET_KEY")
 
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or f"sqlite:///{BASE_DIR / 'recipes.db'}"
@@ -61,7 +61,7 @@ class Config:
     # Zdjęcia muszą leżeć w katalogu static/, bo serwowane są jako /static/uploads/...
     UPLOAD_FOLDER = str(BASE_DIR / "static" / "uploads")
     MAX_CONTENT_LENGTH = _env_int("MAX_UPLOAD_MB", 8) * 1024 * 1024  # limit rozmiaru żądania
-    MAX_IMAGE_DIMENSION = 4000  # px — większe obrazy są proporcjonalnie zmniejszane
+    MAX_IMAGE_DIMENSION = 4000  # px - większe obrazy są proporcjonalnie zmniejszane
 
     # Limity importu kopii zapasowej (ochrona przed „bombą ZIP").
     BACKUP_MAX_UNCOMPRESSED_MB = _env_int("BACKUP_MAX_UNCOMPRESSED_MB", 300)
@@ -147,7 +147,7 @@ def validate_production_config(config: dict) -> None:
         )
     if problems:
         raise RuntimeError(
-            "Odmowa startu — niebezpieczna konfiguracja produkcyjna:\n  - "
+            "Odmowa startu - niebezpieczna konfiguracja produkcyjna:\n  - "
             + "\n  - ".join(problems)
             + "\n(Do pracy lokalnej ustaw APP_ENV=development.)"
         )

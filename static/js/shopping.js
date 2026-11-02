@@ -1,7 +1,7 @@
 /*
  * Strona listy zakupów: sumuje składniki ze wszystkich dodanych przepisów
  * (ta sama nazwa + jednostka -> jedna pozycja), pozwala odhaczać kupione i kopiować listę.
- * Wszystkie teksty wstawiane przez textContent — nazwy składników nie wykonają się jako HTML.
+ * Wszystkie teksty wstawiane przez textContent - nazwy składników nie wykonają się jako HTML.
  */
 (function () {
   "use strict";
@@ -136,7 +136,7 @@
   }
 
   app.querySelector("[data-shopping-clear-checked]").addEventListener("click", function () {
-    // "Usuń kupione" — odhaczone pozycje znikają z listy, ale przepisy zostają.
+    // "Usuń kupione" - odhaczone pozycje znikają z listy, ale przepisy zostają.
     var d = store.getShopping();
     d.recipes.forEach(function (recipe) {
       recipe.items = (recipe.items || []).filter(function (item) {

@@ -24,7 +24,7 @@
     {% if post.excerpt %}<p class="recipe-description">{{ post.excerpt }}</p>{% endif %}
 
     <div class="blog-content">
-      {# content_html jest oczyszczony przez nh3 (models.render_blog_markdown) — dlatego |safe. #}
+      {# content_html jest oczyszczony przez nh3 (models.render_blog_markdown) - dlatego |safe. #}
       {{ post.content_html | safe }}
     </div>
 

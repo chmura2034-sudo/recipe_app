@@ -1,5 +1,5 @@
 /*
- * Wspólny magazyn listy zakupów i ulubionych — wszystko w localStorage przeglądarki
+ * Wspólny magazyn listy zakupów i ulubionych - wszystko w localStorage przeglądarki
  * (czytelnicy nie mają kont, a lista działa też offline). Udostępnia window.RecipeStore.
  */
 (function () {

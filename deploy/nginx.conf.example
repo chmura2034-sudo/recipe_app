@@ -2,7 +2,7 @@
 # Certyfikat SSL (np. z certbota / Let's Encrypt) zakładamy jako już wystawiony.
 #
 # WAŻNE: jeśli używasz DOKŁADNIE jednego serwera nginx przed aplikacją,
-# ustaw w .env: PROXY_COUNT=1 — inaczej limit prób logowania per IP i wykrywanie
+# ustaw w .env: PROXY_COUNT=1 - inaczej limit prób logowania per IP i wykrywanie
 # HTTPS (nagłówek HSTS) będą działać nieprawidłowo.
 
 server {

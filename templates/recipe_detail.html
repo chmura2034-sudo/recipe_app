@@ -9,7 +9,7 @@
   {% if recipe.description %}<meta property="og:description" content="{{ recipe.description }}">{% endif %}
   {% if recipe.image_url %}<meta property="og:image" content="{{ request.host_url.rstrip('/') ~ recipe.image_url }}">{% endif %}
   {% if recipe_jsonld %}
-    {# |tojson escapuje <, >, & i ' — treść przepisu nie może zamknąć znacznika <script>. #}
+    {# |tojson escapuje <, >, & i ' - treść przepisu nie może zamknąć znacznika <script>. #}
     <script type="application/ld+json" nonce="{{ csp_nonce }}">{{ recipe_jsonld | tojson }}</script>
   {% endif %}
 {% endblock %}
@@ -24,7 +24,7 @@
 
     <div class="recipe-title-row">
       <h1>{{ recipe.title }}</h1>
-      {# Obsługuje static/js/recipe.js — ulubione zapisywane w przeglądarce. #}
+      {# Obsługuje static/js/recipe.js - ulubione zapisywane w przeglądarce. #}
       <button type="button" class="favorite-toggle" data-favorite-toggle
               data-recipe-slug="{{ recipe.slug }}" aria-pressed="false" hidden
               title="Dodaj do ulubionych" aria-label="Dodaj do ulubionych">♡</button>
@@ -33,7 +33,7 @@
 
     {% if recipe.status == "pending" %}
       <div class="status-notice status-notice-pending">
-        ⏳ Ten przepis oczekuje na zatwierdzenie przez administratora — widzisz go, bo jesteś
+        ⏳ Ten przepis oczekuje na zatwierdzenie przez administratora - widzisz go, bo jesteś
         jego autorem/autorką albo administratorem. Publicznie pojawi się dopiero po akceptacji.
       </div>
     {% elif recipe.status == "rejected" %}
@@ -74,7 +74,7 @@
         <form method="post" action="{{ url_for('recipe_rate', slug=recipe.slug) }}" class="rating-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <span class="rating-form-label">{{ 'Twoja ocena:' if my_rating else 'Oceń przepis:' }}</span>
-          {# Kolejność odwrócona (5→1) + flex-direction: row-reverse — pozwala podświetlić
+          {# Kolejność odwrócona (5→1) + flex-direction: row-reverse - pozwala podświetlić
              w CSS gwiazdkę pod kursorem i wszystkie "przed" nią, bez JavaScriptu. #}
           <span class="rating-input">
             {% for i in range(5, 0, -1) %}
@@ -87,7 +87,7 @@
       {% endif %}
     </div>
 
-    {# Widoczne tylko na telefonach/tabletach (pokazuje app.js) — przydatne podczas gotowania. #}
+    {# Widoczne tylko na telefonach/tabletach (pokazuje app.js) - przydatne podczas gotowania. #}
     <button type="button" class="wake-lock-toggle" data-wake-lock aria-pressed="false" hidden>
       <span class="wake-lock-switch" aria-hidden="true"></span>
       <span>
@@ -165,7 +165,7 @@
     <section>
       <div class="steps-header">
         <h2>Składniki</h2>
-        {# Przycisk obsługuje static/js/recipe.js — bierze ilości PO przeliczeniu porcji/formy. #}
+        {# Przycisk obsługuje static/js/recipe.js - bierze ilości PO przeliczeniu porcji/formy. #}
         <button type="button" class="btn btn-small btn-secondary" data-add-to-shopping
                 data-recipe-slug="{{ recipe.slug }}" data-recipe-title="{{ recipe.title }}"
                 data-recipe-url="{{ url_for('recipe_detail', slug=recipe.slug) }}" hidden>
@@ -197,7 +197,7 @@
         <div class="nutrition-summary" id="nutritionSummary">
           <h3 class="nutrition-summary-title">Wartości odżywcze</h3>
           <p class="field-hint">
-            Suma ze składników, dla których podano wartości — jeśli część składników ich nie ma,
+            Suma ze składników, dla których podano wartości - jeśli część składników ich nie ma,
             to tylko orientacyjny dolny szacunek.
           </p>
           <div class="nutrition-grid">
@@ -283,7 +283,7 @@
 
   <script src="{{ url_for('static', filename='js/recipe.js') }}" defer></script>
   <script nonce="{{ csp_nonce }}">
-    // Zaznaczanie wykonanych kroków — stan zapamiętywany lokalnie w przeglądarce (per przepis)
+    // Zaznaczanie wykonanych kroków - stan zapamiętywany lokalnie w przeglądarce (per przepis)
     (function () {
       const checklist = document.getElementById("stepsChecklist");
       if (!checklist) return;
@@ -359,7 +359,7 @@
       const panValueEl = document.getElementById("panValue");
       const infoEl = document.getElementById("scaleFactorInfo");
 
-      // Wartości odżywcze — skalują się razem ze składnikami (ten sam mnożnik `factor`).
+      // Wartości odżywcze - skalują się razem ze składnikami (ten sam mnożnik `factor`).
       const nutritionTotalEls = {
         kcal: document.getElementById("totalKcalValue"),
         protein: document.getElementById("totalProteinValue"),
@@ -462,7 +462,7 @@
         return "";
       }
 
-      // Pole powierzchni formy niezależnie od kształtu — używane do przeliczania między
+      // Pole powierzchni formy niezależnie od kształtu - używane do przeliczania między
       // formą okrągłą a kwadratową/prostokątną.
       function areaFor(shape, size, width, length) {
         if (shape === "okragla" && size) return Math.PI * Math.pow(size / 2, 2);
@@ -584,7 +584,7 @@
           }
 
           if (!originalArea || !targetArea) {
-            if (infoEl) infoEl.textContent = "Brak danych o oryginalnej wielkości formy — nie można przeliczyć.";
+            if (infoEl) infoEl.textContent = "Brak danych o oryginalnej wielkości formy - nie można przeliczyć.";
             return;
           }
 
