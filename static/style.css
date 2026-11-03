@@ -26,6 +26,8 @@ body {
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
+  /* Długie słowa / adresy URL bez spacji łamią się zamiast wychodzić poza ekran. */
+  overflow-wrap: break-word;
 }
 
 .topbar {
@@ -154,6 +156,7 @@ h1 { margin-top: 0; }
 }
 
 .recipe-card {
+  min-width: 0; /* element siatki nie rozpycha kolumny przez długie słowo */
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -184,13 +187,14 @@ h1 { margin-top: 0; }
   background: var(--border);
 }
 
-.recipe-card-body { padding: 0.9rem; }
+.recipe-card-body { padding: 0.9rem; overflow-wrap: anywhere; }
 .recipe-card-body h2 { font-size: 1.05rem; margin: 0 0 0.3rem; }
 .recipe-card-body p { font-size: 0.9rem; color: var(--muted); margin: 0 0 0.5rem; }
 
 .recipe-meta {
   display: flex;
-  gap: 0.8rem;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
   font-size: 0.85rem;
   color: var(--muted);
 }
@@ -430,6 +434,8 @@ h1 { margin-top: 0; }
   accent-color: var(--primary);
   flex-shrink: 0;
 }
+
+.step-check-text { min-width: 0; }
 
 .step-done .step-check-text {
   text-decoration: line-through;
@@ -1061,7 +1067,7 @@ h1 { margin-top: 0; }
 
 /* ---------- ulubione ---------- */
 .recipe-title-row { display: flex; align-items: flex-start; gap: 0.6rem; }
-.recipe-title-row h1 { flex: 1; }
+.recipe-title-row h1 { flex: 1; min-width: 0; }
 .favorite-toggle {
   flex-shrink: 0; margin-top: 0.4rem; width: 2.6rem; height: 2.6rem; border-radius: 50%;
   border: 1px solid var(--border); background: var(--card-bg); color: var(--primary);
