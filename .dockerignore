@@ -1,0 +1,44 @@
+# Pliki, które NIE trafiają do obrazu Dockera (`COPY . .` w Dockerfile).
+# Obraz ma zawierać tylko kod aplikacji. Dane (baza, zdjęcia) leżą w wolumenach,
+# a sekrety przychodzą ze zmiennych środowiskowych (docker-compose: env_file / environment).
+
+# --- Sekrety ---
+.env
+.env.*
+!.env.example
+
+# --- Dane serwisu: baza z kontami i hashami haseł, wgrane zdjęcia, kopie zapasowe ---
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+instance/
+static/uploads/*
+!static/uploads/.gitkeep
+kopia-przepisow-*.zip
+backups/
+
+# --- Lokalne środowisko i narzędzia ---
+.git
+.gitignore
+venv/
+.venv/
+**/__pycache__
+**/*.py[cod]
+.pytest_cache/
+graphify-out/
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Pliki wdrożeniowe niepotrzebne w samym obrazie ---
+Dockerfile
+.dockerignore
+docker-compose*.yml
+docker-compose*.yml.example
+deploy/
+README.md

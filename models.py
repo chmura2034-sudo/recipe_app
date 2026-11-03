@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime
 
 import markdown
@@ -59,8 +60,23 @@ class User(UserMixin, db.Model):
     failed_login_attempts = db.Column(db.Integer, nullable=False, default=0)
     locked_until = db.Column(db.DateTime, nullable=True)
 
+    # Losowy znacznik zapisywany (przez get_id) w ciasteczku sesji. Ciasteczko Flaska jest
+    # przechowywane po stronie przeglądarki, więc serwer nie może go "skasować" - zamiast tego
+    # zmieniamy znacznik w bazie: każda sesja ze starym znacznikiem przestaje być ważna.
+    # Zmieniany przy zmianie/resecie hasła i przy wylogowaniu.
+    session_token = db.Column(db.String(64), nullable=True)
+
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)
+        self.rotate_session_token()
+
+    def rotate_session_token(self) -> None:
+        """Unieważnia wszystkie istniejące sesje tego konta (na wszystkich urządzeniach)."""
+        self.session_token = secrets.token_urlsafe(32)
+
+    def get_id(self) -> str:
+        # Flask-Login zapisuje tę wartość w sesji i przekazuje ją do user_loader.
+        return f"{self.id}:{self.session_token}"
 
     def check_password(self, password: str) -> bool:
         return check_password_hash(self.password_hash, password)
@@ -80,6 +96,8 @@ class User(UserMixin, db.Model):
     def register_successful_login(self) -> None:
         self.failed_login_attempts = 0
         self.locked_until = None
+        if not self.session_token:  # konta sprzed wprowadzenia znacznika sesji
+            self.rotate_session_token()
 
     @property
     def is_admin(self):

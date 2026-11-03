@@ -46,6 +46,13 @@ INSECURE_SECRET_KEYS = {
 }
 
 
+def _trusted_hosts_from_env():
+    hosts = [h.strip().lower() for h in os.environ.get("TRUSTED_HOSTS", "").split(",") if h.strip()]
+    if not hosts:
+        return None
+    return hosts + [h for h in ("localhost", "127.0.0.1") if h not in hosts]
+
+
 class Config:
     """Konfiguracja produkcyjna (domyślna)."""
 
@@ -96,6 +103,13 @@ class Config:
 
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 
+    # ---- Dozwolone domeny (nagłówek Host) ----
+    # Np. TRUSTED_HOSTS=twoja-domena.pl,www.twoja-domena.pl. Żądanie z innym Host dostaje 400,
+    # więc podrobiony nagłówek nie trafi do adresów w sitemap.xml, robots.txt ani danych
+    # strukturalnych. localhost/127.0.0.1 są dopisywane zawsze (healthcheck Dockera, curl na serwerze).
+    # Puste = brak sprawdzania (aplikacja ostrzega o tym w logu przy starcie produkcyjnym).
+    TRUSTED_HOSTS = _trusted_hosts_from_env()
+
     # ---- Polityka prywatności ----
     # Administrator danych (imię i nazwisko / firma, adres) oraz e-mail kontaktowy w sprawach
     # danych osobowych - wyświetlane na stronie /polityka-prywatnosci. Ustaw na produkcji.
@@ -104,6 +118,7 @@ class Config:
 
 
 class DevelopmentConfig(Config):
+    TRUSTED_HOSTS = None
     APP_ENV = "development"
     SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-only-insecure-key"
     SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", False)
@@ -112,6 +127,7 @@ class DevelopmentConfig(Config):
 
 
 class TestingConfig(Config):
+    TRUSTED_HOSTS = None
     APP_ENV = "testing"
     TESTING = True
     SECRET_KEY = "test-secret-key-only-for-automated-tests-0123456789"

@@ -5,6 +5,27 @@
 # ustaw w .env: PROXY_COUNT=1 - inaczej limit prób logowania per IP i wykrywanie
 # HTTPS (nagłówek HSTS) będą działać nieprawidłowo.
 
+# Domyślne serwery: żądania z nieznanym nagłówkiem Host (skanery wchodzące po samym IP,
+# podrobiony Host) są odrzucane, zanim dotrą do aplikacji. Bez tego nginx kierowałby
+# je do pierwszego bloku server poniżej.
+# ssl_reject_handshake wymaga nginx >= 1.19.4 (Debian 12, Ubuntu 24.04 - OK; sprawdź: nginx -v).
+# Na starszym nginx (np. Ubuntu 22.04 ma 1.18) zamiast tej linii podaj w bloku 443 dowolny
+# certyfikat (ssl_certificate / ssl_certificate_key, np. ten sam co niżej) - `return 444` wystarczy.
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    return 444;
+}
+
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    server_name _;
+    ssl_reject_handshake on;  # nieznana domena w SNI - odrzucenie już na etapie TLS
+    return 444;               # znana domena w SNI, ale obcy nagłówek Host
+}
+
 server {
     listen 80;
     server_name twoja-domena.pl;

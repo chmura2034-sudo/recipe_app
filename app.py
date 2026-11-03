@@ -33,6 +33,7 @@ from PIL import Image, UnidentifiedImageError
 from sqlalchemy import event, func, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.engine import Engine
+from werkzeug.exceptions import SecurityError
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -275,13 +276,21 @@ def create_app(config_class=None):
     proxy_count = app.config["PROXY_COUNT"]
     if proxy_count > 0:
         app.wsgi_app = ProxyFix(
-            app.wsgi_app, x_for=proxy_count, x_proto=proxy_count, x_host=proxy_count, x_prefix=0
+            # x_host=0: domenę bierzemy z nagłówka Host (nginx ustawia go na $host, który pasuje
+            # do server_name). X-Forwarded-Host nginx przepuszcza od klienta bez zmian - ufanie mu
+            # pozwalałoby podrobić domenę w generowanych adresach (sitemap, robots.txt).
+            app.wsgi_app, x_for=proxy_count, x_proto=proxy_count, x_host=0, x_prefix=0
         )
 
     logging.basicConfig(
         level=app.config["LOG_LEVEL"], format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     app.logger.setLevel(app.config["LOG_LEVEL"])
+    if app.config.get("APP_ENV") == "production" and not app.config.get("TRUSTED_HOSTS"):
+        app.logger.warning(
+            "TRUSTED_HOSTS nie jest ustawione - aplikacja przyjmuje dowolny nagłówek Host. "
+            "Ustaw TRUSTED_HOSTS=twoja-domena.pl w .env."
+        )
 
     if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"):
         _register_sqlite_pragmas()
@@ -367,8 +376,16 @@ def create_app(config_class=None):
 
     # ---------- loader dla Flask-Login ----------
     @login_manager.user_loader
-    def load_user(user_id):
-        return db.session.get(User, int(user_id))
+    def load_user(session_id):
+        # Format "id:znacznik" (User.get_id). Sesja jest ważna tylko, gdy znacznik zgadza się
+        # z aktualnym w bazie - po zmianie hasła lub wylogowaniu stare ciasteczka nic nie dają.
+        user_id, _, token = str(session_id).partition(":")
+        if not user_id.isdigit() or not token:
+            return None  # m.in. sesje ze starym formatem ("1") - wymagają ponownego logowania
+        user = db.session.get(User, int(user_id))
+        if user is None or not user.session_token or not hmac.compare_digest(user.session_token, token):
+            return None
+        return user
 
     # ---------- widoki publiczne ----------
     # Sortowanie listy przepisów (pkt: najnowsze / najlepiej oceniane / komentowane / najszybsze / A–Z).
@@ -657,9 +674,24 @@ def create_app(config_class=None):
             .all()
         )
 
+    def _sign_form_ts(ts: int) -> str:
+        """Znacznik czasu wyświetlenia formularza + podpis HMAC ("1730000000.ab12...").
+        Podpis sprawia, że bot nie może po prostu wysłać starej/wymyślonej wartości,
+        żeby ominąć pułapkę czasową - musi najpierw pobrać stronę i odczekać."""
+        return f"{ts}.{_hmac_hex(f'comment-form-ts:{ts}')}"
+
+    def _form_ts_elapsed(value: str):
+        """Sekundy od wyświetlenia formularza albo None, gdy znacznik jest brakujący/podrobiony."""
+        ts, _, signature = (value or "").partition(".")
+        expected = _hmac_hex(f"comment-form-ts:{ts}")
+        # Porównanie na bajtach: compare_digest na str rzuca wyjątkiem dla znaków spoza ASCII.
+        if not ts.isascii() or not ts.isdigit() or not hmac.compare_digest(signature.encode(), expected.encode()):
+            return None
+        return time.time() - int(ts)
+
     def _comment_form_context():
         return {
-            "comment_form_ts": int(time.time()),
+            "comment_form_ts": _sign_form_ts(int(time.time())),
             "comment_name_max": COMMENT_NAME_MAX,
             "comment_content_max": COMMENT_CONTENT_MAX,
         }
@@ -669,11 +701,8 @@ def create_app(config_class=None):
         redirect_url += "#komentarze"
         # Pułapka na boty: pole niewidoczne dla ludzi oraz zbyt szybkie wysłanie formularza.
         # Botowi udajemy sukces, żeby nie wiedział, że został odrzucony.
-        try:
-            elapsed = time.time() - int(request.form.get("form_ts", "0"))
-        except ValueError:
-            elapsed = 0
-        if request.form.get("website") or elapsed < COMMENT_MIN_SECONDS:
+        elapsed = _form_ts_elapsed(request.form.get("form_ts", ""))
+        if request.form.get("website") or elapsed is None or elapsed < COMMENT_MIN_SECONDS:
             flash(COMMENT_THANKS, "success")
             return redirect(redirect_url)
 
@@ -972,6 +1001,12 @@ def create_app(config_class=None):
             413,
         )
 
+    @app.errorhandler(SecurityError)
+    def untrusted_host(_e):
+        # Nagłówek Host spoza TRUSTED_HOSTS. Bez szablonu: base.html buduje adresy bezwzględne
+        # (og:image), a do tego potrzebna jest zaufana domena - render zakończyłby się błędem 500.
+        return app.response_class("Nieprawidłowy nagłówek Host.", status=400, mimetype="text/plain")
+
     @app.errorhandler(400)
     def bad_request(_e):
         return render_template("errors.html", code=400, message="Nieprawidłowe żądanie."), 400
@@ -1002,6 +1037,10 @@ def create_app(config_class=None):
     def logout():
         # POST + token CSRF: obca strona nie może wylogować użytkownika zwykłym linkiem/obrazkiem.
         app.logger.info("Wylogowano %r", current_user.username)
+        # Wylogowanie kończy sesje na WSZYSTKICH urządzeniach - także skopiowane/wykradzione
+        # ciasteczko przestaje działać.
+        current_user.rotate_session_token()
+        db.session.commit()
         logout_user()
         flash("Wylogowano.", "success")
         return redirect(url_for("index"))
@@ -1026,10 +1065,13 @@ def create_app(config_class=None):
                 if password_error:
                     flash(password_error, "error")
                 else:
-                    current_user.set_password(new_password)
+                    user = current_user._get_current_object()
+                    user.set_password(new_password)  # zmienia też znacznik sesji
                     db.session.commit()
-                    app.logger.info("Użytkownik %r zmienił własne hasło", current_user.username)
-                    flash("Hasło zostało zmienione.", "success")
+                    # Inne urządzenia zostają wylogowane; bieżącą sesję odnawiamy nowym znacznikiem.
+                    login_user(user)
+                    app.logger.info("Użytkownik %r zmienił własne hasło", user.username)
+                    flash("Hasło zostało zmienione. Pozostałe urządzenia zostały wylogowane.", "success")
                     return redirect(url_for(_post_login_redirect_endpoint()))
 
         return render_template(

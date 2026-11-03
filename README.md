@@ -76,6 +76,7 @@ do repozytorium (patrz `.gitignore`). Najważniejsze zmienne:
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` | Próg i czas blokady konta po nieudanych logowaniach | `5` / `15`                |
 | `MAX_UPLOAD_MB`            | Limit rozmiaru przesyłanego pliku (zdjęcia)                            | `8`                       |
 | `BACKUP_MAX_UNCOMPRESSED_MB` | Limit rozpakowanego rozmiaru importowanej kopii zapasowej            | `300`                     |
+| `TRUSTED_HOSTS`            | Dozwolone domeny (nagłówek Host), po przecinku; `localhost`/`127.0.0.1` dopisywane zawsze | *(puste - brak sprawdzania, ostrzeżenie w logu)* |
 | `PRIVACY_CONTROLLER`       | Administrator danych (imię i nazwisko / firma, adres) na stronie `/polityka-prywatnosci` | *(puste - strona pokazuje „uzupełnij")* |
 | `PRIVACY_CONTACT_EMAIL`    | E-mail w sprawach danych osobowych na stronie `/polityka-prywatnosci` | *(puste)*                 |
 
@@ -91,6 +92,7 @@ recipe_app/
 ├── .env                          # zmienne środowiskowe (tworzysz sam, poza repozytorium)
 ├── .gitignore
 ├── Dockerfile
+├── .dockerignore                 # .env, baza, zdjęcia, venv, .git NIE trafiają do obrazu
 ├── docker-compose.yml.example
 ├── deploy/
 │   ├── nginx.conf.example        # reverse proxy + HTTPS
@@ -209,6 +211,12 @@ Aplikacja zawiera kilka wbudowanych zabezpieczeń:
   wewnątrz tej samej aplikacji; próba przekierowania na obcą domenę (`https://zla-strona.pl`)
   albo adres protokołowo-względny (`//zla-strona.pl`) jest odrzucana - chroni to przed
   wykorzystaniem linku do logowania jako narzędzia phishingu.
+- **Unieważnianie sesji** - ciasteczko sesji zawiera losowy znacznik konta
+  (`User.session_token`), sprawdzany przy każdym żądaniu. Zmiana lub reset hasła oraz
+  wylogowanie zmieniają znacznik, więc kończą sesje na **wszystkich** urządzeniach - także
+  skopiowane lub wykradzione ciasteczko przestaje działać. Po zmianie własnego hasła bieżąca
+  sesja zostaje (dostaje nowy znacznik). Po wdrożeniu tej zmiany (migracja `d4e5f6a7b8c9`)
+  wszyscy zalogowani muszą zalogować się ponownie.
 - **Ochrona przed atakiem czasowym (timing attack) i wyliczaniem kont** - logowanie na
   nieistniejące konto wykonuje dokładnie tak samo kosztowne, fikcyjne sprawdzenie hasła
   (`_DUMMY_PASSWORD_HASH`) jak logowanie na istniejące konto ze złym hasłem, więc czas
@@ -319,6 +327,8 @@ APP_ENV=production
 SECRET_KEY=<wklej-wygenerowany-klucz>
 # Jeden nginx przed aplikacją = 1. Źle ustawione psuje limit logowań per IP i wykrywanie HTTPS.
 PROXY_COUNT=1
+# Domena(-y) serwisu, po przecinku. Inny nagłówek Host = błąd 400 (ochrona przed podrobionym Host).
+TRUSTED_HOSTS=twoja-domena.pl
 # Tylko opcja B: baza w osobnym katalogu (patrz krok B3). W opcji A ustawia to docker-compose.
 DATABASE_URL=sqlite:////opt/recipe-app/data/recipes.db
 # Opcjonalnie: domyślny login dla `flask create-admin`
@@ -366,9 +376,9 @@ cp docker-compose.yml.example docker-compose.yml
 nano docker-compose.yml
 ```
 
-W `docker-compose.yml` zmień mapowanie portu na `"127.0.0.1:8000:8000"` (zamiast `"8000:8000"`).
-To ważne: Docker sam dopisuje reguły iptables i **omija `ufw`**, więc bez tego gunicorn
-byłby dostępny z internetu po zwykłym HTTP. Usuń też z `.env` linię `DATABASE_URL` -
+Przykład mapuje port jako `"127.0.0.1:8000:8000"` - **nie zmieniaj tego na `"8000:8000"`**.
+Docker sam dopisuje reguły iptables i **omija `ufw`**, więc wtedy gunicorn byłby dostępny
+z internetu po zwykłym HTTP, z pominięciem nginx. Usuń też z `.env` linię `DATABASE_URL` -
 w kontenerze ustawia ją `docker-compose.yml` (`sqlite:////data/recipes.db`).
 
 **A3. Budowa, migracje, konto admina, start:**
@@ -537,7 +547,9 @@ Na VPS1 otwórz port tunelu: `sudo ufw allow 51820/udp`. Sprawdź połączenie:
 - `proxy_pass http://10.10.10.2:8000;` zamiast `http://127.0.0.1:8000`,
 - **usuń** blok `location /static/ { ... }` - pliki statyczne są na VPS2.
 
-Test z VPS1: `curl http://10.10.10.2:8000/healthz`.
+Test z VPS1: `curl -H "Host: twoja-domena.pl" http://10.10.10.2:8000/healthz`
+(nagłówek Host jest potrzebny, bo przy ustawionym `TRUSTED_HOSTS` aplikacja odrzuca
+żądania zaadresowane samym IP tunelu).
 
 ---
 
@@ -590,6 +602,8 @@ Kopie regularnie przenoś **poza serwer** (np. `rsync`/`rclone` do chmury).
 - [ ] `APP_ENV=production` (domyślne - po prostu nie ustawiaj `development` na serwerze).
 - [ ] Aplikacja dostępna wyłącznie przez HTTPS (nginx + certyfikat); `SESSION_COOKIE_SECURE`
       zostaje na `true` (domyślne w production).
+- [ ] `TRUSTED_HOSTS` ustawione na domenę serwisu, a nginx ma bloki `default_server`
+      odrzucające nieznane domeny (patrz `deploy/nginx.conf.example`).
 - [ ] Port `8000` niedostępny z internetu (bind na `127.0.0.1` / adres tunelu; w Dockerze
       mapowanie `127.0.0.1:8000:8000`, bo Docker omija `ufw`).
 - [ ] `PROXY_COUNT` ustawiony na dokładną liczbę serwerów proxy przed aplikacją (zwykle `1`

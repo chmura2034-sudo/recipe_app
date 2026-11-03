@@ -16,7 +16,12 @@ services:
       - db-data:/data
       - uploads-data:/app/static/uploads
     ports:
-      - "8000:8000"
+      # TYLKO localhost: ruch z internetu ma iść przez nginx (HTTPS) na hoście.
+      # Docker dopisuje własne reguły iptables i OMIJA ufw - samo "8000:8000" wystawiłoby
+      # gunicorna na wszystkich interfejsach po zwykłym HTTP (i pozwoliło podrobić
+      # X-Forwarded-For, omijając limity prób logowania per IP).
+      # Wariant z tunelem WireGuard (patrz README, opcja C): "10.10.10.2:8000:8000".
+      - "127.0.0.1:8000:8000"
     restart: unless-stopped
 
 volumes:
