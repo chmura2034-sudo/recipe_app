@@ -76,6 +76,8 @@ do repozytorium (patrz `.gitignore`). Najważniejsze zmienne:
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` | Próg i czas blokady konta po nieudanych logowaniach | `5` / `15`                |
 | `MAX_UPLOAD_MB`            | Limit rozmiaru przesyłanego pliku (zdjęcia)                            | `8`                       |
 | `BACKUP_MAX_UNCOMPRESSED_MB` | Limit rozpakowanego rozmiaru importowanej kopii zapasowej            | `300`                     |
+| `PRIVACY_CONTROLLER`       | Administrator danych (imię i nazwisko / firma, adres) na stronie `/polityka-prywatnosci` | *(puste - strona pokazuje „uzupełnij")* |
+| `PRIVACY_CONTACT_EMAIL`    | E-mail w sprawach danych osobowych na stronie `/polityka-prywatnosci` | *(puste)*                 |
 
 ## Struktura projektu
 

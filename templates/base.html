@@ -98,6 +98,11 @@
     <p class="footer-tagline">Przepisy · Blog kulinarny</p>
     {# Pokazywany przez app.js, gdy przeglądarka pozwala zainstalować aplikację. #}
     <button type="button" class="btn btn-small install-app-btn" data-install-app hidden>📲 Zainstaluj aplikację</button>
+    <p class="footer-links">
+      <a href="{{ url_for('privacy_policy') }}">Polityka prywatności</a>
+      <span aria-hidden="true">·</span>
+      <a href="{{ url_for('privacy_policy') }}#ciasteczka">Ciasteczka</a>
+    </p>
     <p>&copy; 2026 Szczypta Smaku</p>
   </footer>
 </body>

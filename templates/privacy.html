@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Polityka prywatności i ciasteczka – Szczypta Smaku{% endblock %}
+
+{% block content %}
+<article class="legal-page blog-content">
+  <h1>Polityka prywatności</h1>
+  <p class="legal-updated">Ostatnia aktualizacja: 3 listopada 2026 r.</p>
+
+  <p>
+    Szanujemy Twoją prywatność. Serwis Szczypta Smaku zbiera tylko te dane, które są potrzebne
+    do jego działania. Nie korzystamy z zewnętrznej analityki (np. Google Analytics), reklam,
+    pikseli śledzących ani wtyczek mediów społecznościowych. Wszystkie skrypty, czcionki i zdjęcia
+    są wczytywane bezpośrednio z naszego serwera.
+  </p>
+
+  <h2 id="administrator">1. Administrator danych</h2>
+  <p>
+    Administratorem danych osobowych jest
+    {% if controller %}<strong>{{ controller }}</strong>{% else %}<span class="legal-missing">[uzupełnij: imię i nazwisko lub nazwa firmy oraz adres - zmienna PRIVACY_CONTROLLER]</span>{% endif %}.
+    W sprawach dotyczących danych osobowych napisz na adres
+    {% if contact_email %}<a href="mailto:{{ contact_email }}">{{ contact_email }}</a>{% else %}<span class="legal-missing">[uzupełnij: e-mail - zmienna PRIVACY_CONTACT_EMAIL]</span>{% endif %}.
+  </p>
+
+  <h2 id="dane">2. Jakie dane przetwarzamy i dlaczego</h2>
+
+  <h3>Przeglądanie strony</h3>
+  <p>
+    Gdy odwiedzasz serwis, serwer automatycznie zapisuje w dziennikach (logach) techniczne
+    informacje o żądaniu: adres IP, datę i godzinę, adres odwiedzanej strony oraz informacje
+    o przeglądarce. Wykorzystujemy je wyłącznie do zapewnienia bezpieczeństwa i poprawnego
+    działania serwisu, np. do wykrywania nadużyć i ograniczania liczby żądań z jednego adresu.
+    Podstawą jest nasz prawnie uzasadniony interes (art. 6 ust. 1 lit. f RODO). Logi
+    przechowujemy tylko tak długo, jak to potrzebne do tych celów.
+  </p>
+  <p>
+    Zliczamy też, ile razy dziennie wyświetlono każdy przepis i wpis na blogu. Jest to wyłącznie
+    licznik: nie zapisujemy przy nim adresu IP, ciasteczek ani żadnych innych danych o Tobie.
+  </p>
+
+  <h3 id="komentarze">Komentarze</h3>
+  <p>
+    Komentarz możesz dodać bez zakładania konta. Zapisujemy podany przez Ciebie pseudonim, treść
+    komentarza i datę jego dodania. Nie prosimy o adres e-mail. Do ochrony przed spamem zapisujemy
+    nie sam adres IP, tylko jego jednokierunkowy skrót (HMAC), z którego nie da się odtworzyć
+    adresu. Komentarze pojawiają się publicznie po zatwierdzeniu przez moderatora.
+  </p>
+  <p>
+    Pseudonim i treść komentarza publikujemy na podstawie Twojej zgody wyrażonej przez wysłanie
+    formularza (art. 6 ust. 1 lit. a RODO). Ochrona przed spamem opiera się na naszym prawnie
+    uzasadnionym interesie (art. 6 ust. 1 lit. f RODO). Komentarz przechowujemy, dopóki nie
+    zostanie usunięty, także na Twoją prośbę. Zgodę możesz wycofać w każdej chwili, ale nie
+    wpływa to na to, co zrobiliśmy przed jej wycofaniem. Nie wpisuj w komentarzu danych, których
+    nie chcesz upubliczniać.
+  </p>
+
+  <h3>Oceny przepisów</h3>
+  <p>
+    Gdy oceniasz przepis, zapisujemy w Twojej przeglądarce ciasteczko <code>voter_id</code>
+    z losowym identyfikatorem. Dzięki niemu możesz później zmienić swoją ocenę i nie da się
+    oddać kilku głosów na ten sam przepis. W bazie danych przechowujemy wyłącznie skrót (HMAC) tego
+    identyfikatora razem z oceną. Podstawą jest nasz prawnie uzasadniony interes
+    (art. 6 ust. 1 lit. f RODO), czyli rzetelne oceny przepisów.
+  </p>
+
+  <h3>Konta redakcji</h3>
+  <p>
+    Konta zakładamy tylko autorom i administratorom serwisu. Przechowujemy login, rolę i hasło
+    w postaci zaszyfrowanego skrótu. Do celów bezpieczeństwa zapisujemy też liczbę nieudanych
+    prób logowania, a w logach serwera adres IP logowania (art. 6 ust. 1 lit. b i f RODO).
+  </p>
+
+  <h2 id="ciasteczka">3. Ciasteczka (cookies) i pamięć przeglądarki</h2>
+  <p>
+    Ciasteczka to małe pliki tekstowe zapisywane przez stronę w Twojej przeglądarce. Używamy
+    <strong>wyłącznie ciasteczek niezbędnych</strong> do działania funkcji, z których świadomie
+    korzystasz. Nie stosujemy ciasteczek analitycznych, reklamowych ani pochodzących od innych
+    firm. Ciasteczka niezbędne nie wymagają zgody, dlatego nie wyświetlamy okienka ze zgodą
+    na ciasteczka.
+  </p>
+
+  <div class="legal-table-wrap">
+    <table class="legal-table">
+      <thead>
+        <tr><th>Nazwa</th><th>Do czego służy</th><th>Jak długo</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>session</code></td>
+          <td>Ochrona formularzy (np. komentarzy) przed atakami CSRF oraz utrzymanie zalogowania
+              członków redakcji.</td>
+          <td>Do zamknięcia przeglądarki</td>
+        </tr>
+        <tr>
+          <td><code>voter_id</code></td>
+          <td>Zapamiętanie Twojej oceny przepisu, tak by można ją było zmienić. Zapisywane dopiero
+              po oddaniu oceny.</td>
+          <td>2 lata</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Oprócz ciasteczek serwis zapisuje niektóre ustawienia w pamięci Twojej przeglądarki
+    (<em>localStorage</em>). Te dane <strong>nie są wysyłane na nasz serwer</strong> i zostają
+    tylko na Twoim urządzeniu:
+  </p>
+
+  <div class="legal-table-wrap">
+    <table class="legal-table">
+      <thead>
+        <tr><th>Nazwa</th><th>Do czego służy</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>theme</code></td><td>Wybrany motyw (jasny lub ciemny).</td></tr>
+        <tr><td><code>favorites-v1</code></td><td>Lista ulubionych przepisów.</td></tr>
+        <tr><td><code>shopping-list-v1</code></td><td>Twoja lista zakupów.</td></tr>
+        <tr><td><code>recipe-progress-…</code></td><td>Kroki przepisu odhaczone podczas gotowania.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    Jeśli zainstalujesz serwis jako aplikację albo korzystasz z niego offline, przeglądarka
+    przechowuje też kopie odwiedzonych stron i zdjęć, żeby działały bez internetu.
+  </p>
+  <p>
+    Ciasteczka i dane strony możesz w każdej chwili usunąć albo zablokować w ustawieniach
+    przeglądarki. Jeśli zablokujesz ciasteczka, nie będzie można dodawać komentarzy, oceniać
+    przepisów ani zalogować się do panelu redakcji. Jeśli wyczyścisz dane strony, znikną też
+    ulubione przepisy i lista zakupów.
+  </p>
+
+  <h2 id="odbiorcy">4. Komu przekazujemy dane</h2>
+  <p>
+    Nie sprzedajemy ani nie udostępniamy danych innym firmom w celach marketingowych.
+    Dane są przechowywane na serwerze dostawcy usług hostingowych, który przetwarza je wyłącznie
+    na nasze zlecenie, w celu utrzymania serwisu. Dane możemy też przekazać uprawnionym organom,
+    jeśli wymagają tego przepisy prawa. Nie podejmujemy decyzji w sposób zautomatyzowany
+    i nie profilujemy użytkowników.
+  </p>
+
+  <h2 id="prawa">5. Twoje prawa</h2>
+  <p>Na zasadach określonych w RODO masz prawo do:</p>
+  <ul>
+    <li>dostępu do swoich danych i otrzymania ich kopii,</li>
+    <li>sprostowania danych,</li>
+    <li>usunięcia danych (np. swojego komentarza),</li>
+    <li>ograniczenia przetwarzania,</li>
+    <li>przenoszenia danych,</li>
+    <li>sprzeciwu wobec przetwarzania opartego na prawnie uzasadnionym interesie,</li>
+    <li>wycofania zgody w dowolnym momencie,</li>
+    <li>wniesienia skargi do Prezesa Urzędu Ochrony Danych Osobowych (ul. Stawki 2, 00-193 Warszawa).</li>
+  </ul>
+  <p>
+    Ponieważ nie zbieramy adresów e-mail ani nie zakładamy kont czytelnikom, przy prośbie
+    o usunięcie komentarza podaj stronę, na której się znajduje, pseudonim i przybliżoną datę
+    jego dodania.
+  </p>
+
+  <h2 id="zmiany">6. Zmiany polityki</h2>
+  <p>
+    Jeśli zmieni się sposób przetwarzania danych w serwisie, zaktualizujemy tę stronę i datę
+    ostatniej aktualizacji na jej początku.
+  </p>
+</article>
+{% endblock %}

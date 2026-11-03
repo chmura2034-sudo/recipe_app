@@ -96,6 +96,12 @@ class Config:
 
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 
+    # ---- Polityka prywatności ----
+    # Administrator danych (imię i nazwisko / firma, adres) oraz e-mail kontaktowy w sprawach
+    # danych osobowych - wyświetlane na stronie /polityka-prywatnosci. Ustaw na produkcji.
+    PRIVACY_CONTROLLER = os.environ.get("PRIVACY_CONTROLLER", "").strip()
+    PRIVACY_CONTACT_EMAIL = os.environ.get("PRIVACY_CONTACT_EMAIL", "").strip()
+
 
 class DevelopmentConfig(Config):
     APP_ENV = "development"

@@ -790,6 +790,14 @@ def create_app(config_class=None):
     def offline_page():
         return render_template("offline.html")
 
+    @app.route("/polityka-prywatnosci")
+    def privacy_policy():
+        return render_template(
+            "privacy.html",
+            controller=app.config.get("PRIVACY_CONTROLLER", ""),
+            contact_email=app.config.get("PRIVACY_CONTACT_EMAIL", ""),
+        )
+
     # ---------- SEO: mapa witryny dla wyszukiwarek ----------
     @app.route("/sitemap.xml")
     def sitemap_xml():
@@ -801,7 +809,11 @@ def create_app(config_class=None):
                 parts.append(f"<lastmod>{lastmod.strftime('%Y-%m-%d')}</lastmod>")
             return "<url>" + "".join(parts) + "</url>"
 
-        urls = [entry(url_for("index", _external=True)), entry(url_for("blog_index", _external=True))]
+        urls = [
+            entry(url_for("index", _external=True)),
+            entry(url_for("blog_index", _external=True)),
+            entry(url_for("privacy_policy", _external=True)),
+        ]
         for slug, updated in (
             db.session.query(Recipe.slug, Recipe.updated_at)
             .filter(Recipe.status == "published")
