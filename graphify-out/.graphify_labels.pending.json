@@ -1,7 +1,8 @@
 {
   "0": "create_app",
-  "1": "Recipe create/edit form",
-  "7": "Backup export/import page",
+  "1": "Recipe",
+  "5": "resetScale",
+  "7": "Recipe create/edit form",
   "10": "sqlalchemy",
   "12": "models.py",
   "15": "blog_editor.js",
