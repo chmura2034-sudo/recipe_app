@@ -534,7 +534,7 @@ def create_app(config_class=None):
             **_comment_form_context(),
         )
 
-    def _similar_recipes(recipe, limit=4):
+    def _similar_recipes(recipe, limit=3):
         """Przepisy z największą liczbą wspólnych tagów. Gdy żaden nie ma wspólnego tagu -
         po prostu najnowsze (wtedy sekcja nazywa się „Inne przepisy"). Zwraca (lista, czy_po_tagach)."""
         base = Recipe.query.filter(Recipe.status == "published", Recipe.id != recipe.id)
