@@ -129,8 +129,9 @@ def form_count(value: str):
 
 
 def _clean_line_field(value) -> str:
-    """Usuwa znaki, które zepsułyby zapis składników linia-po-linii ("|" i nowe linie)."""
-    return re.sub(r"[|\r\n]+", " ", str(value if value is not None else "")).strip()
+    """Usuwa znaki, które zepsułyby zapis składników linia-po-linii: "|" i separatory linii,
+    także te rzadkie (\\v, \\f, \\x1c-\\x1e, \\x85, \\u2028, \\u2029), np. z wklejonego tekstu."""
+    return re.sub(r"[|\n\r\v\f\x1c-\x1e\x85\u2028\u2029]+", " ", str(value if value is not None else "")).strip()
 
 
 def is_negative_text(value) -> bool:
@@ -163,7 +164,9 @@ def serialize_ingredient_entries(entries) -> str:
             if not name:
                 continue
             # amount jest pierwszym polem linii - nie może przypadkiem wyglądać jak nagłówek sekcji
-            amount = _clean_number_field(entry.get("amount")).replace(Recipe.SECTION_MARKER, "")
+            amount = _clean_number_field(entry.get("amount"))
+            while Recipe.SECTION_MARKER in amount:  # usunięcie może złożyć znacznik na nowo
+                amount = amount.replace(Recipe.SECTION_MARKER, "")
             unit = _clean_line_field(entry.get("unit"))
             kcal = _clean_number_field(entry.get("kcal"))
             protein = _clean_number_field(entry.get("protein"))

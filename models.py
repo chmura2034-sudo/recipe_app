@@ -184,7 +184,8 @@ class Recipe(db.Model):
         current = {"name": None, "items": []}
         has_current_content = False
 
-        for raw_line in (self.ingredients or "").splitlines():
+        # Nie splitlines(): dzieli też po \u2028 i \x85, które mogą być w starszych składnikach.
+        for raw_line in (self.ingredients or "").split("\n"):
             line = raw_line.strip()
             if not line:
                 continue
