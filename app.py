@@ -117,6 +117,13 @@ def needs_new_slug(item, new_title: str) -> bool:
 MAX_BACKUP_COUNT = 2**63 - 1  # największa liczba całkowita, którą przyjmie baza
 
 
+def form_count(value: str):
+    """Nieujemna liczba całkowita z pola formularza albo None. Sam str.isdigit() nie wystarcza:
+    przepuszcza np. "²", którego nie da się zamienić na int, a liczba musi też zmieścić się w bazie."""
+    value = value.strip()
+    return int(value) if value.isascii() and value.isdigit() and len(value) <= 18 else None
+
+
 def _clean_line_field(value) -> str:
     """Usuwa znaki, które zepsułyby zapis składników linia-po-linii ("|" i nowe linie)."""
     return re.sub(r"[|\r\n]+", " ", str(value if value is not None else "")).strip()
@@ -2577,14 +2584,14 @@ def create_app(config_class=None):
 
         if recipe.pan_shape == "okragla":
             pan_size = request.form.get("pan_size_cm", "").strip()
-            recipe.pan_size_cm = int(pan_size) if pan_size.isdigit() else None
+            recipe.pan_size_cm = form_count(pan_size)
             recipe.pan_width_cm = None
             recipe.pan_length_cm = None
         elif recipe.pan_shape == "prostokatna":
             pan_width = request.form.get("pan_width_cm", "").strip()
             pan_length = request.form.get("pan_length_cm", "").strip()
-            recipe.pan_width_cm = int(pan_width) if pan_width.isdigit() else None
-            recipe.pan_length_cm = int(pan_length) if pan_length.isdigit() else None
+            recipe.pan_width_cm = form_count(pan_width)
+            recipe.pan_length_cm = form_count(pan_length)
             recipe.pan_size_cm = None
         else:
             recipe.pan_size_cm = None
@@ -2592,10 +2599,11 @@ def create_app(config_class=None):
             recipe.pan_length_cm = None
 
         servings = request.form.get("servings", "").strip()
-        recipe.servings = int(servings) if servings.isdigit() else None
+        recipe.servings = form_count(servings)
 
         prep_time = request.form.get("prep_time_min", "").strip()
-        recipe.prep_time_min = int(prep_time) if prep_time.isdigit() and 0 < int(prep_time) <= 10080 else None
+        prep_time = form_count(prep_time)
+        recipe.prep_time_min = prep_time if prep_time and prep_time <= 10080 else None
         difficulty = request.form.get("difficulty", "").strip()
         recipe.difficulty = difficulty if difficulty in DIFFICULTIES else None
 
