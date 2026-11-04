@@ -675,24 +675,24 @@ def create_app(config_class=None):
         if request.headers.get("Purpose") == "prefetch" or request.headers.get("Sec-Purpose", "").startswith("prefetch"):
             return
         today = date.today()
+
+        def increment():
+            return db.session.execute(
+                update(DailyView)
+                .where(DailyView.kind == kind, DailyView.object_id == object_id, DailyView.day == today)
+                .values(views=DailyView.views + 1)
+            ).rowcount
+
         try:
-            result = db.session.execute(
-                update(DailyView)
-                .where(DailyView.kind == kind, DailyView.object_id == object_id, DailyView.day == today)
-                .values(views=DailyView.views + 1)
-            )
-            if result.rowcount == 0:
+            if increment() == 0:
                 db.session.add(DailyView(kind=kind, object_id=object_id, day=today, views=1))
-            db.session.commit()
-        except IntegrityError:
-            # Równoległe pierwsze wyświetlenie dnia - wiersz już istnieje, więc tylko zwiększamy.
-            db.session.rollback()
-            db.session.execute(
-                update(DailyView)
-                .where(DailyView.kind == kind, DailyView.object_id == object_id, DailyView.day == today)
-                .values(views=DailyView.views + 1)
-            )
-            db.session.commit()
+            try:
+                db.session.commit()
+            except IntegrityError:
+                # Równoległe pierwsze wyświetlenie dnia - wiersz już istnieje, więc tylko zwiększamy.
+                db.session.rollback()
+                increment()
+                db.session.commit()
         except Exception:  # noqa: BLE001
             db.session.rollback()
             app.logger.exception("Nie udało się zapisać wyświetlenia")
@@ -865,14 +865,22 @@ def create_app(config_class=None):
             token = secrets.token_urlsafe(24)
         voter_hash = _hmac_hex("voter:" + token)
 
-        rating = RecipeRating.query.filter_by(recipe_id=recipe.id, voter_hash=voter_hash).first()
-        if rating:
-            rating.score = score
-            flash("Zmieniono Twoją ocenę przepisu.", "success")
-        else:
+        voter_rating = RecipeRating.query.filter_by(recipe_id=recipe.id, voter_hash=voter_hash)
+        rating = voter_rating.first()
+        is_new = rating is None
+        if is_new:
             db.session.add(RecipeRating(recipe_id=recipe.id, score=score, voter_hash=voter_hash))
-            flash("Dziękujemy za ocenę!", "success")
-        db.session.commit()
+        else:
+            rating.score = score
+        try:
+            db.session.commit()
+        except IntegrityError:
+            # Równoległy pierwszy głos (podwójne kliknięcie) - wiersz już istnieje, więc go zmieniamy.
+            db.session.rollback()
+            is_new = False
+            voter_rating.update({"score": score})
+            db.session.commit()
+        flash("Dziękujemy za ocenę!" if is_new else "Zmieniono Twoją ocenę przepisu.", "success")
 
         response = redirect(redirect_url)
         response.set_cookie(
