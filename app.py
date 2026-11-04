@@ -194,21 +194,32 @@ def _fold(text: str) -> str:
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
 
 
+# Końcówki odmiany (bez polskich znaków), od najdłuższych. Rdzeń musi mieć co najmniej 3 litery.
+_INGREDIENT_ENDINGS = (
+    "owego", "owych", "owymi", "owej", "owym", "owy", "owa", "owe", "ami", "ach", "ego", "emu", "ych", "ymi",
+    "ow", "om", "em", "ej", "ym", "ie", "ek", "a", "e", "i", "o", "u", "y",
+)
+# „Mąka" i „mak" po usunięciu ogonków są nieodróżnialne. Formy bez ogonków: wpisane z telefonu.
+_MAKA_WORDS = {"maka", "maki", "make"}
+
+
 def _stem(word: str) -> str:
-    """Bardzo prosty „rdzeń" polskiego słowa - obcina końcówkę fleksyjną, by 'jajka', 'jajko'
-    i 'jaj' oraz 'mąka'/'mąki'/'mąkę' pasowały do siebie."""
-    if len(word) >= 6:
-        return word[:-2]
-    if len(word) >= 4:
-        return word[:-1]
+    """Rdzeń polskiego słowa po obcięciu końcówki odmiany, żeby 'mleko' i 'mleka' były równe,
+    a 'mąka' i 'makaron' różne. Przyjmuje słowo małymi literami, jeszcze z polskimi znakami."""
+    if word.startswith("mąk") or word in _MAKA_WORDS:
+        return "mąk"
+    word = _fold(word)
+    for ending in _INGREDIENT_ENDINGS:
+        if word.endswith(ending) and len(word) - len(ending) >= 3:
+            return word[: -len(ending)]
     return word
 
 
 def parse_ingredient_terms(text: str):
-    """'jajka, mąkę i mleko' -> [('jajka', 'jajk'), ('mąkę', 'mak'), ('mleko', 'mlek')]."""
+    """'jajka, mąkę i mleko' -> [('jajka', ['jajk']), ('mąkę', ['mąk']), ('mleko', ['mlek'])]."""
     terms = []
     for chunk in re.split(r"[,;\n]+|\s+i\s+|\s+oraz\s+", text):
-        words = [w for w in re.findall(r"[\w-]+", _fold(chunk)) if w not in _INGREDIENT_STOPWORDS]
+        words = [w for w in re.findall(r"[\w-]+", chunk.lower()) if _fold(w) not in _INGREDIENT_STOPWORDS]
         if not words:
             continue
         stems = [_stem(w) for w in words if len(w) >= 3]
@@ -217,9 +228,15 @@ def parse_ingredient_terms(text: str):
     return terms[:15]
 
 
+def _same_stem(first: str, second: str) -> bool:
+    """Równe rdzenie albo różnica jednego zdrobniającego „k": 'jaj'/'jajk', 'cebul'/'cebulk'."""
+    shorter, longer = sorted((first, second), key=len)
+    return first == second or longer == shorter + "k"
+
+
 def _ingredient_matches(name: str, stems) -> bool:
-    folded_words = re.findall(r"[\w-]+", _fold(name))
-    return all(any(w.startswith(stem) for w in folded_words) for stem in stems)
+    name_stems = [_stem(w) for w in re.findall(r"[\w-]+", name.lower())]
+    return all(any(_same_stem(found, stem) for found in name_stems) for stem in stems)
 
 
 def match_recipe_ingredients(recipe, terms):
