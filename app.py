@@ -114,6 +114,9 @@ def needs_new_slug(item, new_title: str) -> bool:
     return not item.slug or slugify(item.title or "") != slugify(new_title)
 
 
+MAX_BACKUP_COUNT = 2**63 - 1  # największa liczba całkowita, którą przyjmie baza
+
+
 def _clean_line_field(value) -> str:
     """Usuwa znaki, które zepsułyby zapis składników linia-po-linii ("|" i nowe linie)."""
     return re.sub(r"[|\r\n]+", " ", str(value if value is not None else "")).strip()
@@ -1849,7 +1852,10 @@ def create_app(config_class=None):
                 created = updated = 0
                 skipped = []
                 for entry in manifest.get("recipes", []):
-                    recipe, note = _restore_recipe_from_backup(entry, mode, image_name_map)
+                    recipe, note = (
+                        _restore_recipe_from_backup(entry, mode, image_name_map)
+                        if isinstance(entry, dict) else (None, "nieprawidłowa pozycja")
+                    )
                     if recipe is None:
                         skipped.append(note)
                     elif note.startswith("utworzono"):
@@ -1898,6 +1904,11 @@ def create_app(config_class=None):
         except (zipfile.BadZipFile, KeyError, json.JSONDecodeError, UnicodeDecodeError) as exc:
             db.session.rollback()
             flash(f"Nie udało się odczytać kopii zapasowej - nieprawidłowy plik ({exc}).", "error")
+        except (AttributeError, TypeError, ValueError, IntegrityError):
+            # Poprawny JSON o złej zawartości, np. liczba zamiast listy kroków albo powtórzony tag.
+            db.session.rollback()
+            app.logger.exception("Import kopii zapasowej przerwany: nieprawidłowa zawartość")
+            flash("Kopia zapasowa ma nieprawidłową zawartość - nic nie zostało zaimportowane.", "error")
 
         return redirect(url_for("backup_page"))
 
@@ -2337,7 +2348,7 @@ def create_app(config_class=None):
     # ---------- kopia zapasowa: odtwarzanie pojedynczego przepisu ----------
     def _backup_count(value):
         """Nieujemna liczba całkowita z pliku kopii zapasowej albo None (json przepuszcza też NaN)."""
-        if isinstance(value, (int, float)) and math.isfinite(value) and value >= 0:
+        if isinstance(value, (int, float)) and math.isfinite(value) and 0 <= value <= MAX_BACKUP_COUNT:
             return int(value)
         return None
 
