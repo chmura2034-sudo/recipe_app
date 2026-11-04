@@ -567,10 +567,11 @@ def create_app(config_class=None):
             )
         elif sort == "czas":
             recipes_query = recipes_query.order_by(
-                Recipe.prep_time_min.is_(None), Recipe.prep_time_min.asc(), Recipe.title.asc()
+                Recipe.prep_time_min.is_(None), Recipe.prep_time_min.asc(), Recipe.title_search.asc()
             )
         elif sort == "az":
-            recipes_query = recipes_query.order_by(Recipe.title.asc())
+            # title_search: SQLite porównuje surowe znaki, więc Ł, Ż i małe litery trafiałyby za Z.
+            recipes_query = recipes_query.order_by(Recipe.title_search.asc())
         else:
             recipes_query = recipes_query.order_by(Recipe.created_at.desc())
 
