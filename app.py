@@ -657,6 +657,11 @@ def create_app(config_class=None):
     # ---------- własne statystyki wyświetleń (bez zewnętrznej analityki i ciasteczek) ----------
     _BOT_UA_RE = re.compile(r"bot|crawl|spider|slurp|preview|monitor|curl|wget|python-requests|headless", re.I)
 
+    def _delete_views(kind, object_id):
+        """DailyView nie ma klucza obcego, a SQLite używa ponownie zwolnionych id - bez tego
+        nowy przepis lub wpis odziedziczyłby wyświetlenia usuniętego."""
+        DailyView.query.filter_by(kind=kind, object_id=object_id).delete()
+
     def _count_view(kind, object_id):
         """+1 do dzisiejszego licznika strony. Pomija zalogowanych (redakcja) i boty.
         Błąd licznika nigdy nie może zepsuć wyświetlenia przepisu."""
@@ -1262,6 +1267,7 @@ def create_app(config_class=None):
     def recipe_delete(recipe_id):
         recipe = db.session.get(Recipe, recipe_id) or abort(404)
         _queue_image_cleanup(image_names_in(recipe.image_url, recipe.previous_image_url))
+        _delete_views("recipe", recipe.id)
         db.session.delete(recipe)
         db.session.commit()
         flash("Przepis został usunięty.", "success")
@@ -1451,6 +1457,7 @@ def create_app(config_class=None):
             flash("Przepis, który był już opublikowany, może usunąć tylko administrator.", "error")
             return redirect(url_for("redaktor_dashboard"))
         _queue_image_cleanup(image_names_in(recipe.image_url, recipe.previous_image_url))
+        _delete_views("recipe", recipe.id)
         db.session.delete(recipe)
         db.session.commit()
         flash("Przepis został usunięty.", "success")
@@ -1643,6 +1650,7 @@ def create_app(config_class=None):
     def blog_delete(post_id):
         post = db.session.get(BlogPost, post_id) or abort(404)
         _queue_image_cleanup(image_names_in(post.image_url, post.previous_image_url, post.content))
+        _delete_views("blog", post.id)
         db.session.delete(post)
         db.session.commit()
         flash("Wpis został usunięty.", "success")
@@ -1716,6 +1724,7 @@ def create_app(config_class=None):
             flash("Wpis, który był już opublikowany, może usunąć tylko administrator.", "error")
             return redirect(url_for("redaktor_dashboard"))
         _queue_image_cleanup(image_names_in(post.image_url, post.previous_image_url, post.content))
+        _delete_views("blog", post.id)
         db.session.delete(post)
         db.session.commit()
         flash("Wpis został usunięty.", "success")
@@ -1872,10 +1881,13 @@ def create_app(config_class=None):
                     db.session.execute(recipe_tags.delete())
                     Recipe.query.delete()
                     Tag.query.delete()
+                    # Przywrócone treści dostaną nowe id, więc stare statystyki trafiłyby do innych.
+                    DailyView.query.filter_by(kind="recipe").delete()
                     # Wpisy na blogu też są częścią kopii (od wersji 2 formatu). Komentarze do
                     # przepisów i wpisów usuwa baza (ON DELETE CASCADE).
                     if isinstance(manifest.get("blog_posts"), list):
                         BlogPost.query.delete()
+                        DailyView.query.filter_by(kind="blog").delete()
 
                 image_name_map = _extract_backup_images(zf)
                 _queue_image_cleanup(image_name_map.values())
