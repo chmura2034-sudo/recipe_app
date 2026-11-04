@@ -2458,7 +2458,8 @@ def create_app(config_class=None):
                     # unikalności slug). Jawny flush sprawia, że tag jest już widoczny
                     # dla zapytań w kolejnych iteracjach pętli po przepisach.
                     db.session.flush()
-                tags.append(tag)
+                if tag not in tags:
+                    tags.append(tag)
             recipe.tags = tags
 
             status = data.get("status")
@@ -2560,7 +2561,8 @@ def create_app(config_class=None):
                 # Flush natychmiast, żeby dwie różne nazwy dające ten sam slug w jednym
                 # zgłoszeniu (np. "Deser" i "deser!") nie próbowały utworzyć taga dwukrotnie.
                 db.session.flush()
-            tags.append(tag)
+            if tag not in tags:
+                tags.append(tag)
         recipe.tags = tags
 
     def _save_recipe_form(recipe: Recipe):
