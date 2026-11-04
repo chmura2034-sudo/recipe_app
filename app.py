@@ -2228,6 +2228,7 @@ def create_app(config_class=None):
             author = User.query.filter_by(username=str(data.get("author_username") or "")).first()
             post = BlogPost(slug=slug, author_id=author.id if author else current_user.id)
             post.created_at = _parse_backup_datetime(data.get("created_at")) or datetime.utcnow()
+            post.updated_at = _parse_backup_datetime(data.get("updated_at")) or post.created_at
             db.session.add(post)
             action = "utworzono"
         elif mode == "skip_existing":
