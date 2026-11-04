@@ -174,7 +174,10 @@ def is_safe_redirect_target(target) -> bool:
         return False
     if any(ch in target for ch in "\r\n\t\\"):
         return False
-    parsed = urlparse(target)
+    try:
+        parsed = urlparse(target)
+    except ValueError:  # np. "//[x" - urlparse odrzuca nieprawidłowy host wyjątkiem
+        return False
     if parsed.scheme or parsed.netloc:
         return False
     return target.startswith("/") and not target.startswith("//")
