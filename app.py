@@ -2387,7 +2387,10 @@ def create_app(config_class=None):
             recipe = Recipe.query.filter_by(slug=slug).first()
 
             if recipe is None:
-                recipe = Recipe(slug=slug, author_id=current_user.id)
+                author = User.query.filter_by(username=str(data.get("author_username") or "")).first()
+                recipe = Recipe(slug=slug, author_id=author.id if author else current_user.id)
+                recipe.created_at = _parse_backup_datetime(data.get("created_at")) or datetime.utcnow()
+                recipe.updated_at = _parse_backup_datetime(data.get("updated_at")) or recipe.created_at
                 db.session.add(recipe)
                 note_prefix = "utworzono"
             elif mode == "skip_existing":
