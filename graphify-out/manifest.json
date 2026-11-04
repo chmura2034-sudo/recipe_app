@@ -1,8 +1,8 @@
 {
   "app.py": {
-    "mtime": 1793807198.707304,
-    "seen": 1793807220.925168,
-    "ast_hash": "7c846bf7926a40b3a318eaa5e192f8d0",
+    "mtime": 1793831439.6151953,
+    "seen": 1793831465.5611424,
+    "ast_hash": "6d5e8f61a5f0fd2553c623e197d4c7cf",
     "semantic_hash": ""
   },
   "config.py": {
@@ -24,9 +24,9 @@
     "semantic_hash": "8b43f42b3f3922dd0fa41a812fb08f21"
   },
   "models.py": {
-    "mtime": 1793807218.0174136,
-    "seen": 1793807220.9251926,
-    "ast_hash": "591ce816f434c96ab45718aee6e4ec56",
+    "mtime": 1793830009.336286,
+    "seen": 1793830748.868095,
+    "ast_hash": "096cf563db3e68160503c50f075015ad",
     "semantic_hash": ""
   },
   "static/js/app.js": {
@@ -78,9 +78,9 @@
     "semantic_hash": ""
   },
   "templates/admin/recipe_form.html": {
-    "mtime": 1793807198.7134013,
-    "seen": 1793807220.9252195,
-    "ast_hash": "4aa80cfd18cfa6d47f5460f7630cd99a",
+    "mtime": 1793831401.1022882,
+    "seen": 1793831465.561197,
+    "ast_hash": "a4355eb12f819198a1b2a21f9ce99d63",
     "semantic_hash": ""
   },
   "templates/base.html": {
@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "templates/recipe_detail.html": {
-    "mtime": 1793807198.7144907,
-    "seen": 1793807220.9252334,
-    "ast_hash": "15ffd34d83726cbcac296d047b4a8ab7",
+    "mtime": 1793831401.1024215,
+    "seen": 1793831465.5612116,
+    "ast_hash": "6cd9e5dec9294994c42c73f41dc35eeb",
     "semantic_hash": ""
   },
   "templates/redaktor/dashboard.html": {
@@ -138,8 +138,8 @@
     "semantic_hash": ""
   },
   "templates/admin/blog_form.html": {
-    "mtime": 1793807198.7132084,
-    "seen": 1793807220.9252129,
+    "mtime": 1793830009.3364875,
+    "seen": 1793830748.8681166,
     "ast_hash": "99c5322006e3b0bf10942871dd26a6ce",
     "semantic_hash": ""
   },
@@ -168,8 +168,8 @@
     "semantic_hash": ""
   },
   "templates/_comments.html": {
-    "mtime": 1793807198.7119813,
-    "seen": 1793807220.925208,
+    "mtime": 1793830009.336286,
+    "seen": 1793830748.8681111,
     "ast_hash": "a1b3c98b22eb053a904705e6634ddf90",
     "semantic_hash": ""
   },
@@ -309,6 +309,12 @@
     "mtime": 1793806435.322422,
     "seen": 1793807220.9251852,
     "ast_hash": "895d4905eb483275ce865cf7d258447b",
+    "semantic_hash": ""
+  },
+  "migrations/versions/c9d0e1f2a3b4_remove_orphaned_daily_views.py": {
+    "mtime": 1793830067.546603,
+    "seen": 1793830748.8680892,
+    "ast_hash": "b71aa81ac5e76cd44834148013bc2ebe",
     "semantic_hash": ""
   }
 }
