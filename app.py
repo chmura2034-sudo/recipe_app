@@ -8,6 +8,7 @@ import os
 import re
 import secrets
 import sqlite3
+import struct
 import time
 import unicodedata
 import uuid
@@ -79,6 +80,10 @@ WEAK_PASSWORDS = {"zmien-to-haslo", "password", "haslo12345", "1234567890", "qwe
 # Mapowanie: format wykryty przez Pillow -> rozszerzenie pliku zapisywanego na dysku.
 # MPO to JPEG z dodatkowymi obrazami (tak zapisują zdjęcia niektóre telefony) - zapisujemy pierwszy.
 SAFE_IMAGE_FORMATS = {"JPEG": "jpg", "MPO": "jpg", "PNG": "png", "GIF": "gif", "WEBP": "webp"}
+
+
+# Uszkodzone dane obrazu: Pillow zgłasza je różnie, także jako struct.error (np. nagłówek klatki GIF-a).
+CORRUPT_IMAGE_ERRORS = (OSError, ValueError, EOFError, struct.error)
 
 
 def animation_save_options(image) -> dict:
@@ -1965,7 +1970,7 @@ def create_app(config_class=None):
             image.load()  # wymusza pełne zdekodowanie pikseli (wyłapuje uszkodzone/spreparowane pliki)
         except Image.DecompressionBombError:
             return None, "Obraz jest zbyt duży (zbyt wiele pikseli) - odrzucono ze względów bezpieczeństwa."
-        except (UnidentifiedImageError, OSError, ValueError):
+        except (UnidentifiedImageError, *CORRUPT_IMAGE_ERRORS):
             return None, "Plik nie jest prawidłowym obrazem (dozwolone: PNG, JPG, GIF, WEBP)."
 
         detected_format = (image.format or "").upper()
@@ -1977,12 +1982,15 @@ def create_app(config_class=None):
 
         # Animacje zapisujemy z wszystkimi klatkami. Zbyt duże (limit pikseli liczony łącznie dla
         # klatek, jak ochrona przed bombami dekompresji) zostają nieruchomym obrazem z 1. klatki.
-        frames = 1 if detected_format == "MPO" else getattr(image, "n_frames", 1)
+        try:
+            frames = 1 if detected_format == "MPO" else getattr(image, "n_frames", 1)
+        except CORRUPT_IMAGE_ERRORS:
+            return None, "Plik nie jest prawidłowym obrazem (dozwolone: PNG, JPG, GIF, WEBP)."
         save_kwargs = {}
         if frames > 1 and fits_max_dim and image.width * image.height * frames <= Image.MAX_IMAGE_PIXELS:
             try:
                 save_kwargs = animation_save_options(image)
-            except (OSError, ValueError, EOFError):
+            except CORRUPT_IMAGE_ERRORS:
                 return None, "Plik nie jest prawidłowym obrazem (dozwolone: PNG, JPG, GIF, WEBP)."
         else:
             # Telefon zapisuje zdjęcie „na boku” z tagiem orientacji, a EXIF usuwamy.
@@ -2006,7 +2014,7 @@ def create_app(config_class=None):
             # Zapis BEZ przekazywania oryginalnych metadanych (brak exif=...) -
             # to jawnie usuwa EXIF i wszystko poza samą siatką pikseli obrazu.
             image.save(target_path, format=save_format, **save_kwargs)
-        except (OSError, ValueError, EOFError) as exc:
+        except CORRUPT_IMAGE_ERRORS as exc:
             return None, f"Nie udało się zapisać obrazu: {exc}"
 
         return filename, None
