@@ -3,7 +3,6 @@ import hmac
 import io
 import json
 import logging
-import math
 import os
 import re
 import secrets
@@ -13,6 +12,7 @@ import time
 import unicodedata
 import uuid
 import zipfile
+import zlib
 from datetime import date, datetime, timedelta
 from functools import wraps
 from urllib.parse import urlparse
@@ -118,6 +118,7 @@ def needs_new_slug(item, new_title: str) -> bool:
     return not item.slug or slugify(item.title or "") != slugify(new_title)
 
 
+BACKUP_APP_ID = "wielka-ksiega-przepisow"
 MAX_BACKUP_COUNT = 2**63 - 1  # największa liczba całkowita, którą przyjmie baza
 
 
@@ -590,7 +591,8 @@ def create_app(config_class=None):
             recipes = [r for r in recipes if r.id in matches]
             recipes.sort(key=lambda r: (-len(matches[r.id]["matched_terms"]), len(matches[r.id]["missing"])))
 
-        all_tags = Tag.query.order_by(Tag.name).all()
+        # Tylko tagi z opublikowanymi przepisami - inne prowadziłyby do pustej strony.
+        all_tags = Tag.query.filter(Tag.recipes.any(Recipe.status == "published")).order_by(Tag.name).all()
         return render_template(
             "index.html",
             recipes=recipes,
@@ -1102,7 +1104,7 @@ def create_app(config_class=None):
             render_template(
                 "errors.html",
                 code=429,
-                message="Zbyt wiele prób logowania w krótkim czasie. Spróbuj ponownie za chwilę.",
+                message="Zbyt wiele prób w krótkim czasie. Spróbuj ponownie za chwilę.",
             ),
             429,
         )
@@ -1237,17 +1239,7 @@ def create_app(config_class=None):
             db.session.commit()
             flash("Przepis został dodany.", "success")
             return redirect(url_for("admin_dashboard"))
-        return render_template(
-            "admin/recipe_form.html",
-            recipe=None,
-            units=INGREDIENT_UNITS,
-            pan_shapes=PAN_SHAPES,
-            all_tags=Tag.query.order_by(Tag.name).all(),
-            difficulties=DIFFICULTIES,
-            form_action=url_for("recipe_create"),
-            cancel_url=url_for("admin_dashboard"),
-            editor_mode=False,
-        )
+        return _render_recipe_form(None, cancel_endpoint="admin_dashboard", editor_mode=False)
 
     @app.route("/admin/przepis/<int:recipe_id>/edytuj", methods=["GET", "POST"])
     @login_required
@@ -1261,17 +1253,7 @@ def create_app(config_class=None):
             db.session.commit()
             flash("Przepis został zaktualizowany i opublikowany.", "success")
             return redirect(url_for("admin_dashboard"))
-        return render_template(
-            "admin/recipe_form.html",
-            recipe=recipe,
-            units=INGREDIENT_UNITS,
-            pan_shapes=PAN_SHAPES,
-            all_tags=Tag.query.order_by(Tag.name).all(),
-            difficulties=DIFFICULTIES,
-            form_action=url_for("recipe_edit", recipe_id=recipe.id),
-            cancel_url=url_for("admin_dashboard"),
-            editor_mode=False,
-        )
+        return _render_recipe_form(recipe, cancel_endpoint="admin_dashboard", editor_mode=False)
 
     @app.route("/admin/przepis/<int:recipe_id>/usun", methods=["POST"])
     @login_required
@@ -1383,8 +1365,9 @@ def create_app(config_class=None):
         if user.role != "redaktor":
             abort(403)
         # Przepisy usuwanego redaktora zostają, ale tracą powiązanie z autorem.
-        Recipe.query.filter_by(author_id=user.id).update({"author_id": None})
-        BlogPost.query.filter_by(author_id=user.id).update({"author_id": None})
+        # Podanie updated_at wprost wyłącza onupdate - treść się nie zmieniła.
+        Recipe.query.filter_by(author_id=user.id).update({"author_id": None, "updated_at": Recipe.updated_at})
+        BlogPost.query.filter_by(author_id=user.id).update({"author_id": None, "updated_at": BlogPost.updated_at})
         db.session.delete(user)
         db.session.commit()
         flash(f"Usunięto konto redaktora: {user.username}.", "success")
@@ -1414,17 +1397,7 @@ def create_app(config_class=None):
             db.session.commit()
             flash("Przepis został wysłany do zatwierdzenia przez administratora.", "success")
             return redirect(url_for("redaktor_dashboard"))
-        return render_template(
-            "admin/recipe_form.html",
-            recipe=None,
-            units=INGREDIENT_UNITS,
-            pan_shapes=PAN_SHAPES,
-            all_tags=Tag.query.order_by(Tag.name).all(),
-            difficulties=DIFFICULTIES,
-            form_action=url_for("redaktor_recipe_create"),
-            cancel_url=url_for("redaktor_dashboard"),
-            editor_mode=True,
-        )
+        return _render_recipe_form(None, cancel_endpoint="redaktor_dashboard", editor_mode=True)
 
     @app.route("/redakcja/przepis/<int:recipe_id>/edytuj", methods=["GET", "POST"])
     @login_required
@@ -1444,17 +1417,7 @@ def create_app(config_class=None):
             db.session.commit()
             flash("Zmiany zostały wysłane do ponownego zatwierdzenia.", "success")
             return redirect(url_for("redaktor_dashboard"))
-        return render_template(
-            "admin/recipe_form.html",
-            recipe=recipe,
-            units=INGREDIENT_UNITS,
-            pan_shapes=PAN_SHAPES,
-            all_tags=Tag.query.order_by(Tag.name).all(),
-            difficulties=DIFFICULTIES,
-            form_action=url_for("redaktor_recipe_edit", recipe_id=recipe.id),
-            cancel_url=url_for("redaktor_dashboard"),
-            editor_mode=True,
-        )
+        return _render_recipe_form(recipe, cancel_endpoint="redaktor_dashboard", editor_mode=True)
 
     @app.route("/redakcja/przepis/<int:recipe_id>/usun", methods=["POST"])
     @login_required
@@ -1879,13 +1842,22 @@ def create_app(config_class=None):
 
                 with zf.open("recipes.json") as fh:
                     manifest = json.load(io.TextIOWrapper(fh, encoding="utf-8"))
-                if not isinstance(manifest, dict) or not isinstance(manifest.get("recipes", []), list):
-                    flash("Plik recipes.json ma nieprawidłową strukturę.", "error")
+                if (
+                    not isinstance(manifest, dict)
+                    or manifest.get("app") != BACKUP_APP_ID
+                    or not isinstance(manifest.get("recipes"), list)
+                ):
+                    flash("Plik recipes.json nie pochodzi z kopii tej aplikacji lub ma nieprawidłową strukturę.", "error")
                     return redirect(url_for("backup_page"))
 
                 # Import może zastąpić dowolne zdjęcie, a kopia może zawierać zdjęcia, których nic
                 # nie użyje (np. w trybie "Dodaj tylko nowe") - sprawdzamy jedne i drugie po imporcie.
                 _queue_image_cleanup(_referenced_image_names())
+
+                # Przed kasowaniem: kodowanie zdjęć trwa długo, a pierwszy DELETE zakłada
+                # blokadę zapisu SQLite, która zablokowałaby równoległe żądania.
+                image_name_map = _extract_backup_images(zf)
+                _queue_image_cleanup(image_name_map.values())
 
                 if mode == "wipe":
                     # Czyścimy najpierw tabelę pośredniczącą (SQLAlchemy nie robi tego
@@ -1900,9 +1872,6 @@ def create_app(config_class=None):
                     if isinstance(manifest.get("blog_posts"), list):
                         BlogPost.query.delete()
                         DailyView.query.filter_by(kind="blog").delete()
-
-                image_name_map = _extract_backup_images(zf)
-                _queue_image_cleanup(image_name_map.values())
 
                 created = updated = 0
                 skipped = []
@@ -1933,6 +1902,17 @@ def create_app(config_class=None):
                         posts_updated += 1
 
                 reader_stats = _restore_reader_data(manifest, mode)
+
+                # Tryb "wipe" jest wszystko-albo-nic: nie zastępujemy bazy kopią niepełną ani pustą.
+                if mode == "wipe" and (skipped or posts_skipped or not (created or posts_created)):
+                    db.session.rollback()
+                    flash(
+                        "Kopia jest pusta lub zawiera nieprawidłowe pozycje - "
+                        "baza pozostała bez zmian.",
+                        "error",
+                    )
+                    return redirect(url_for("backup_page"))
+
                 db.session.commit()
 
             app.logger.info(
@@ -1956,10 +1936,13 @@ def create_app(config_class=None):
                     " (np. dotyczących wpisów na blogu, których nie ma w tej bazie)."
                 )
             flash(summary, "success")
-        except (zipfile.BadZipFile, KeyError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        except (
+            zipfile.BadZipFile, zlib.error, KeyError, EOFError, NotImplementedError, RuntimeError,
+            json.JSONDecodeError, UnicodeDecodeError,
+        ) as exc:  # RuntimeError: m.in. archiwum zaszyfrowane; NotImplementedError: nieznana kompresja
             db.session.rollback()
             flash(f"Nie udało się odczytać kopii zapasowej - nieprawidłowy plik ({exc}).", "error")
-        except (AttributeError, TypeError, ValueError, IntegrityError):
+        except (AttributeError, TypeError, ValueError, OverflowError, IntegrityError):
             # Poprawny JSON o złej zawartości, np. liczba zamiast listy kroków albo powtórzony tag.
             db.session.rollback()
             app.logger.exception("Import kopii zapasowej przerwany: nieprawidłowa zawartość")
@@ -2190,7 +2173,7 @@ def create_app(config_class=None):
 
             comments_data, ratings_data = _export_reader_data()
             manifest = {
-                "app": "wielka-ksiega-przepisow",
+                "app": BACKUP_APP_ID,
                 # 2 = dodane wpisy na blogu, komentarze i oceny (import nadal przyjmuje wersję 1).
                 "format_version": 2,
                 "exported_at": datetime.utcnow().isoformat() + "Z",
@@ -2406,8 +2389,10 @@ def create_app(config_class=None):
 
     # ---------- kopia zapasowa: odtwarzanie pojedynczego przepisu ----------
     def _backup_count(value):
-        """Nieujemna liczba całkowita z pliku kopii zapasowej albo None (json przepuszcza też NaN)."""
-        if isinstance(value, (int, float)) and math.isfinite(value) and 0 <= value <= MAX_BACKUP_COUNT:
+        """Nieujemna liczba całkowita z pliku kopii zapasowej albo None. Porównanie odrzuca też
+        NaN i nieskończoność, które przepuszcza json, i działa też dla bardzo dużych liczb
+        całkowitych, których nie da się zamienić na float."""
+        if isinstance(value, (int, float)) and 0 <= value <= MAX_BACKUP_COUNT:
             return int(value)
         return None
 
@@ -2492,8 +2477,10 @@ def create_app(config_class=None):
                     # tagiem, no_autoflush uniemożliwiłby kolejnemu zapytaniu zobaczenie
                     # tego taga, co prowadziło do próby utworzenia go drugi raz (błąd
                     # unikalności slug). Jawny flush sprawia, że tag jest już widoczny
-                    # dla zapytań w kolejnych iteracjach pętli po przepisach.
-                    db.session.flush()
+                    # dla zapytań w kolejnych iteracjach pętli po przepisach. Tylko tag:
+                    # zapis niekompletnego przepisu sprawiłby, że dalsze zmiany byłyby
+                    # UPDATE-em, a onupdate nadpisałby updated_at przywrócone z kopii.
+                    db.session.flush([tag])
                 if tag not in tags:
                     tags.append(tag)
             recipe.tags = tags
@@ -2554,6 +2541,41 @@ def create_app(config_class=None):
 
         return entries
 
+    def _render_recipe_form(recipe, cancel_endpoint, editor_mode):
+        return render_template(
+            "admin/recipe_form.html",
+            # POST dociera tu tylko po odrzuceniu formularza - pokazujemy to, co wpisał autor.
+            recipe=_recipe_form_draft(recipe) if request.method == "POST" else recipe,
+            is_new=recipe is None,
+            units=INGREDIENT_UNITS,
+            pan_shapes=PAN_SHAPES,
+            all_tags=Tag.query.order_by(Tag.name).all(),
+            difficulties=DIFFICULTIES,
+            cancel_url=url_for(cancel_endpoint),
+            editor_mode=editor_mode,
+        )
+
+    def _recipe_form_draft(recipe):
+        """Niezapisywany obiekt z wartościami z odrzuconego formularza. Nie trafia do sesji,
+        więc wartości mogą zostać surowym tekstem, a zapisany przepis pozostaje bez zmian."""
+        draft = Recipe(
+            title=request.form.get("title", ""),
+            ingredients=serialize_ingredient_entries(_ingredient_entries_from_form()),
+            instructions=_build_instructions_text(),
+            image_url=recipe.image_url if recipe else None,
+            status=recipe.status if recipe else None,
+            rejection_reason=recipe.rejection_reason if recipe else None,
+            **{
+                field: request.form.get(field, "")
+                for field in (
+                    "description", "servings", "prep_time_min", "difficulty",
+                    "pan_shape", "pan_size_cm", "pan_width_cm", "pan_length_cm",
+                )
+            },
+        )
+        draft.tags = [Tag(name=name) for name in _form_tag_names()]
+        return draft
+
     def _recipe_form_ok() -> bool:
         """False (z komunikatem flash), gdy brakuje wymaganych pól albo formularz zawiera wartość
         ujemną - wtedy wywołujący nie zapisuje przepisu. Przeglądarka też to blokuje, ale żądanie
@@ -2584,19 +2606,20 @@ def create_app(config_class=None):
         steps = [s.strip() for s in request.form.getlist("step[]") if s.strip()]
         return "\n".join(steps)
 
-    def _save_tags(recipe: Recipe):
-        raw = request.form.get("tags", "")
+    def _form_tag_names():
         names = []
         seen = set()
-        for part in raw.split(","):
+        for part in request.form.get("tags", "").split(","):
             name = part.strip()
             if not name or name.lower() in seen:
                 continue
             seen.add(name.lower())
             names.append(name)
+        return names
 
+    def _save_tags(recipe: Recipe):
         tags = []
-        for name in names:
+        for name in _form_tag_names():
             tag_slug = slugify(name) or None
             if not tag_slug:
                 continue

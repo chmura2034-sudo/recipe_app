@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ "Edytuj przepis" if recipe else "Nowy przepis" }} – Szczypta Smaku{% endblock %}
+{% block title %}{{ "Nowy przepis" if is_new else "Edytuj przepis" }} – Szczypta Smaku{% endblock %}
 
 {% block content %}
   {% macro move_buttons() %}
@@ -9,7 +9,7 @@
 
   {% macro item_row(item=None) %}
     <div class="ingredient-row">
-      <input type="number" step="any" min="0" name="ingredient_amount[]" class="ing-amount" placeholder="Ilość" value="{{ item.amount if item else '' }}">
+      <input type="text" inputmode="decimal" name="ingredient_amount[]" class="ing-amount" placeholder="Ilość" value="{{ item.amount if item else '' }}">
       <select name="ingredient_unit[]" class="ing-unit">
         <option value="">jednostka</option>
         {% for u in units %}
@@ -43,12 +43,12 @@
   <a class="back-link" href="{{ cancel_url }}">&larr; Wróć</a>
 
   <div class="form-page">
-    <h1>{{ "Edytuj przepis" if recipe else "Dodaj nowy przepis" }}</h1>
+    <h1>{{ "Dodaj nowy przepis" if is_new else "Edytuj przepis" }}</h1>
 
     {% if editor_mode %}
       <p class="editor-mode-notice">
         ✏️ Jesteś zalogowany jako redaktor. Ten przepis
-        {{ "zostanie ponownie wysłany" if recipe else "zostanie wysłany" }}
+        {{ "zostanie wysłany" if is_new else "zostanie ponownie wysłany" }}
         do zatwierdzenia przez administratora i pojawi się publicznie dopiero po akceptacji.
       </p>
     {% endif %}
@@ -187,7 +187,7 @@
         {% for tag in all_tags %}<option value="{{ tag.name }}">{% endfor %}
       </datalist>
 
-      <button type="submit" class="btn">{{ "Zapisz zmiany" if recipe else "Dodaj przepis" }}</button>
+      <button type="submit" class="btn">{{ "Dodaj przepis" if is_new else "Zapisz zmiany" }}</button>
     </form>
   </div>
 

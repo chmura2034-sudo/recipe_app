@@ -256,7 +256,7 @@
     {% elif current_user.is_authenticated and current_user.is_redaktor and recipe.author_id == current_user.id %}
       <div class="admin-actions">
         <a class="btn" href="{{ url_for('redaktor_recipe_edit', recipe_id=recipe.id) }}">Edytuj</a>
-        {% if recipe.status != "published" %}
+        {% if not recipe.was_published %}
           <form method="post" action="{{ url_for('redaktor_recipe_delete', recipe_id=recipe.id) }}"
                 data-confirm="Na pewno usunąć ten przepis?">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
