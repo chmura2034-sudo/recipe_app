@@ -4,7 +4,7 @@
 {% block content %}
   <a class="back-link" href="{{ cancel_url }}">&larr; Wróć</a>
 
-  <div class="form-page form-page-wide">
+  <div class="form-page">
     <h1>{{ "Nowy wpis na blogu" if is_new else "Edytuj wpis" }}</h1>
 
     {% if editor_mode %}

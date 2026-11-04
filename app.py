@@ -47,7 +47,6 @@ from models import (
     INGREDIENT_UNITS,
     PAN_SHAPES,
     RECIPE_STATUSES,
-    ROLES,
     BLOG_IMAGE_PREFIX,
     BlogPost,
     Comment,

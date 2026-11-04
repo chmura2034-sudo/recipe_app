@@ -9,7 +9,7 @@
       {% for comment in comments %}
         <li class="comment" id="komentarz-{{ comment.id }}">
           <div class="comment-header">
-            <strong class="comment-author">{{ comment.author_name }}</strong>
+            <strong>{{ comment.author_name }}</strong>
             <time class="comment-date" datetime="{{ comment.created_at.isoformat() }}">
               {{ comment.created_at.strftime('%d.%m.%Y, %H:%M') }}
             </time>

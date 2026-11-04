@@ -17,12 +17,6 @@ INGREDIENT_UNITS = ["g", "ml", "szt"]
 # Górna granica wartości odżywczej jednego składnika - większe liczby traktujemy jak brak danych.
 MAX_NUTRITION_VALUE = 1_000_000
 
-# Dozwolone role użytkowników.
-# admin -> pełne prawa (dodaje/edytuje/usuwa/zatwierdza wszystko)
-# redaktor -> może tworzyć i edytować WŁASNE przepisy, ale trafiają one do kolejki
-#             i stają się publiczne dopiero po zatwierdzeniu przez administratora
-ROLES = {"admin": "Administrator", "redaktor": "Redaktor"}
-
 # Statusy przepisu w cyklu redakcyjnym.
 RECIPE_STATUSES = {
     "published": "Opublikowany",
@@ -58,6 +52,9 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
+    # admin -> pełne prawa (dodaje/edytuje/usuwa/zatwierdza wszystko)
+    # redaktor -> może tworzyć i edytować WŁASNE przepisy, ale trafiają one do kolejki
+    #             i stają się publiczne dopiero po zatwierdzeniu przez administratora
     role = db.Column(db.String(20), nullable=False, default="admin")
 
     # Ochrona przed atakami brute-force na logowanie: licznik nieudanych prób
@@ -111,10 +108,6 @@ class User(UserMixin, db.Model):
     @property
     def is_redaktor(self):
         return self.role == "redaktor"
-
-    @property
-    def role_display(self):
-        return ROLES.get(self.role, self.role)
 
     def __repr__(self):
         return f"<User {self.username} ({self.role})>"
@@ -236,11 +229,6 @@ class Recipe(db.Model):
         """Płaska lista {amount, unit, name} ze wszystkich sekcji - dla kodu, któremu
         podział na sekcje jest obojętny (np. eksport do starszego formatu kopii zapasowej)."""
         return [item for section in self.ingredients_sections for item in section["items"]]
-
-    @property
-    def has_ingredient_sections(self):
-        """True, jeśli składniki są podzielone na co najmniej jedną NAZWANĄ sekcję."""
-        return any(section["name"] for section in self.ingredients_sections)
 
     @staticmethod
     def _to_float(value):
@@ -517,10 +505,6 @@ class Comment(db.Model):
     )
 
     @property
-    def target_title(self):
-        return self.recipe.title if self.recipe else (self.blog_post.title if self.blog_post else "")
-
-    @property
     def status_display(self):
         return COMMENT_STATUSES.get(self.status, self.status)
 
@@ -568,8 +552,6 @@ class DailyView(db.Model):
 
     __tablename__ = "daily_views"
     __table_args__ = (db.UniqueConstraint("kind", "object_id", "day", name="uq_daily_views"),)
-
-    KINDS = ("recipe", "blog")
 
     id = db.Column(db.Integer, primary_key=True)
     kind = db.Column(db.String(10), nullable=False)

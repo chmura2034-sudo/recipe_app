@@ -200,7 +200,7 @@
             to tylko orientacyjny dolny szacunek.
           </p>
           <div class="nutrition-grid">
-            <div class="nutrition-col">
+            <div>
               <span class="nutrition-col-label">Cały przepis</span>
               <ul class="nutrition-values">
                 <li><span class="nutrition-value" id="totalKcalValue" data-original="{{ totals.kcal }}">{{ totals.kcal | round(0) | int }}</span> kcal</li>
@@ -210,7 +210,7 @@
               </ul>
             </div>
             {% if per_serving %}
-              <div class="nutrition-col nutrition-col-serving">
+              <div class="nutrition-col-serving">
                 <span class="nutrition-col-label">Na porcję</span>
                 <ul class="nutrition-values">
                   <li class="nutrition-kcal-per-serving">
