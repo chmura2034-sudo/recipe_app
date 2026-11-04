@@ -2026,9 +2026,9 @@ def create_app(config_class=None):
         target_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
 
         try:
-            # Zapis BEZ przekazywania oryginalnych metadanych (brak exif=...) -
-            # to jawnie usuwa EXIF i wszystko poza samą siatką pikseli obrazu.
-            image.save(target_path, format=save_format, **save_kwargs)
+            # Zapis BEZ przekazywania oryginalnych metadanych (brak exif=...) usuwa EXIF.
+            # Komentarz trzeba wyzerować jawnie: zapis JPEG i GIF sam kopiuje go z oryginału.
+            image.save(target_path, format=save_format, comment=b"", **save_kwargs)
         except CORRUPT_IMAGE_ERRORS as exc:
             return None, f"Nie udało się zapisać obrazu: {exc}"
 
