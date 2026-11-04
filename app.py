@@ -1217,7 +1217,7 @@ def create_app(config_class=None):
     @login_required
     @admin_required
     def recipe_create():
-        if request.method == "POST" and _recipe_numbers_ok():
+        if request.method == "POST" and _recipe_form_ok():
             recipe = Recipe(author_id=current_user.id)
             recipe.publish()
             db.session.add(recipe)
@@ -1242,7 +1242,7 @@ def create_app(config_class=None):
     @admin_required
     def recipe_edit(recipe_id):
         recipe = db.session.get(Recipe, recipe_id) or abort(404)
-        if request.method == "POST" and _recipe_numbers_ok():
+        if request.method == "POST" and _recipe_form_ok():
             _save_recipe_form(recipe)
             # Admin zapisujący formularz automatycznie zatwierdza przepis (jeśli czekał w kolejce).
             _approve_changes(recipe)
@@ -1395,7 +1395,7 @@ def create_app(config_class=None):
     @login_required
     @redaktor_or_admin_required
     def redaktor_recipe_create():
-        if request.method == "POST" and _recipe_numbers_ok():
+        if request.method == "POST" and _recipe_form_ok():
             recipe = Recipe(author_id=current_user.id, status="pending")
             db.session.add(recipe)
             _save_recipe_form(recipe)
@@ -1421,7 +1421,7 @@ def create_app(config_class=None):
         recipe = db.session.get(Recipe, recipe_id) or abort(404)
         if recipe.author_id != current_user.id and not current_user.is_admin:
             abort(403)
-        if request.method == "POST" and _recipe_numbers_ok():
+        if request.method == "POST" and _recipe_form_ok():
             approved_image_url = recipe.image_url
             _save_recipe_form(recipe)
             _hold_approved_image(recipe, approved_image_url)
@@ -2541,15 +2541,25 @@ def create_app(config_class=None):
 
         return entries
 
-    def _recipe_numbers_ok() -> bool:
-        """False (z komunikatem flash), gdy formularz zawiera wartość ujemną - wtedy wywołujący
-        nie zapisuje przepisu. Przeglądarka też to blokuje, ale żądanie można wysłać z pominięciem
-        formularza. Sprawdzamy przed zmianą obiektu, więc odrzucenie niczego nie nadpisuje."""
+    def _recipe_form_ok() -> bool:
+        """False (z komunikatem flash), gdy brakuje wymaganych pól albo formularz zawiera wartość
+        ujemną - wtedy wywołujący nie zapisuje przepisu. Przeglądarka też to blokuje, ale żądanie
+        można wysłać z pominięciem formularza. Sprawdzamy przed zmianą obiektu, więc odrzucenie
+        niczego nie nadpisuje."""
+        entries = _ingredient_entries_from_form()
+        has_ingredient = any(
+            isinstance(entry, dict) and entry.get("type") == "item" and _clean_line_field(entry.get("name"))
+            for entry in entries
+        )
+        if not (request.form.get("title", "").strip() and has_ingredient and _build_instructions_text()):
+            flash("Podaj tytuł, co najmniej jeden składnik i co najmniej jeden krok przygotowania.", "error")
+            return False
+
         values = [
             request.form.get(field)
             for field in ("servings", "prep_time_min", "pan_size_cm", "pan_width_cm", "pan_length_cm")
         ]
-        for entry in _ingredient_entries_from_form():
+        for entry in entries:
             if isinstance(entry, dict) and entry.get("type") == "item":
                 values += [entry.get(key) for key in ("amount", "kcal", "protein", "fat", "carbs")]
         if any(is_negative_text(value) for value in values):
@@ -2590,7 +2600,7 @@ def create_app(config_class=None):
 
     def _save_recipe_form(recipe: Recipe):
         _queue_image_cleanup(image_names_in(recipe.image_url))
-        title = request.form.get("title", "").strip()
+        title = request.form.get("title", "").strip()[:150]
         new_slug_needed = needs_new_slug(recipe, title)
         recipe.title = title
 
@@ -2610,7 +2620,7 @@ def create_app(config_class=None):
                     counter += 1
                 recipe.slug = candidate
 
-            recipe.description = request.form.get("description", "").strip()
+            recipe.description = request.form.get("description", "").strip()[:300]
             recipe.ingredients = serialize_ingredient_entries(_ingredient_entries_from_form())
             recipe.instructions = _build_instructions_text()
             _save_tags(recipe)
