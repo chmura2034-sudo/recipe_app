@@ -3,6 +3,7 @@ import hmac
 import io
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -29,8 +30,8 @@ from flask_login import (
 from flask_migrate import Migrate
 from flask_wtf import CSRFProtect
 from flask_wtf.csrf import CSRFError
-from PIL import Image, UnidentifiedImageError
-from sqlalchemy import event, func, text, update
+from PIL import Image, ImageOps, UnidentifiedImageError
+from sqlalchemy import event, false, func, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.engine import Engine
 from werkzeug.exceptions import SecurityError
@@ -56,6 +57,7 @@ from models import (
     Tag,
     User,
     db,
+    fold_search_text,
     recipe_tags,
     render_blog_markdown,
 )
@@ -76,19 +78,56 @@ WEAK_PASSWORDS = {"zmien-to-haslo", "password", "haslo12345", "1234567890", "qwe
 
 # Formaty obrazów, które potrafimy bezpiecznie zdekodować i ponownie zapisać przez Pillow.
 # Mapowanie: format wykryty przez Pillow -> rozszerzenie pliku zapisywanego na dysku.
-SAFE_IMAGE_FORMATS = {"JPEG": "jpg", "PNG": "png", "GIF": "gif", "WEBP": "webp"}
+# MPO to JPEG z dodatkowymi obrazami (tak zapisują zdjęcia niektóre telefony) - zapisujemy pierwszy.
+SAFE_IMAGE_FORMATS = {"JPEG": "jpg", "MPO": "jpg", "PNG": "png", "GIF": "gif", "WEBP": "webp"}
+
+
+def animation_save_options(image) -> dict:
+    """Opcje zapisu animacji: Pillow nie przenosi sam czasu klatek ani sposobu ich czyszczenia
+    (bez niego w przezroczystym GIF-ie klatki nakładają się na siebie)."""
+    durations, disposals = [], []
+    for index in range(image.n_frames):
+        image.seek(index)
+        image.load()
+        durations.append(image.info.get("duration", 100))
+        disposals.append(getattr(image, "disposal_method", 0))
+    image.seek(0)
+    options = {"save_all": True, "duration": durations}
+    if image.format == "GIF":
+        options["disposal"] = disposals
+    if "loop" in image.info:
+        options["loop"] = image.info["loop"]
+    return options
 
 
 def slugify(text: str) -> str:
     """Zamienia tytuł przepisu na URL-owy 'slug', np. 'Żurek Śląski' -> 'zurek-slaski'."""
+    # "ł" nie rozkłada się w NFKD na literę i znak diakrytyczny, więc inaczej by przepadło.
+    text = text.replace("ł", "l").replace("Ł", "L")
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
     text = re.sub(r"[^\w\s-]", "", text).strip().lower()
     return re.sub(r"[\s_-]+", "-", text)
 
 
+def needs_new_slug(item, new_title: str) -> bool:
+    """Slug zmienia się tylko razem z tytułem: zapis bez zmiany tytułu nie może zepsuć adresu."""
+    return not item.slug or slugify(item.title or "") != slugify(new_title)
+
+
 def _clean_line_field(value) -> str:
     """Usuwa znaki, które zepsułyby zapis składników linia-po-linii ("|" i nowe linie)."""
     return re.sub(r"[|\r\n]+", " ", str(value if value is not None else "")).strip()
+
+
+def is_negative_text(value) -> bool:
+    """True dla tekstu zaczynającego się od minusa - także "-0" czy "-nan", których
+    float() nie uzna za liczbę ujemną, oraz typograficznych odmian minusa."""
+    return str(value if value is not None else "").strip().startswith(("-", "\u2212", "\u2013"))
+
+
+def _clean_number_field(value) -> str:
+    """Pole liczbowe składnika gotowe do zapisu; wartość ujemną zamienia na brak danych."""
+    return "" if is_negative_text(value) else _clean_line_field(value)
 
 
 def serialize_ingredient_entries(entries) -> str:
@@ -110,12 +149,12 @@ def serialize_ingredient_entries(entries) -> str:
             if not name:
                 continue
             # amount jest pierwszym polem linii - nie może przypadkiem wyglądać jak nagłówek sekcji
-            amount = _clean_line_field(entry.get("amount")).replace(Recipe.SECTION_MARKER, "")
+            amount = _clean_number_field(entry.get("amount")).replace(Recipe.SECTION_MARKER, "")
             unit = _clean_line_field(entry.get("unit"))
-            kcal = _clean_line_field(entry.get("kcal"))
-            protein = _clean_line_field(entry.get("protein"))
-            fat = _clean_line_field(entry.get("fat"))
-            carbs = _clean_line_field(entry.get("carbs"))
+            kcal = _clean_number_field(entry.get("kcal"))
+            protein = _clean_number_field(entry.get("protein"))
+            fat = _clean_number_field(entry.get("fat"))
+            carbs = _clean_number_field(entry.get("carbs"))
             lines.append(f"{amount}|{unit}|{kcal}|{protein}|{fat}|{carbs}|{name}")
     return "\n".join(lines)
 
@@ -198,8 +237,13 @@ def match_recipe_ingredients(recipe, terms):
     }
 
 
-# Odwołania do wgranych zdjęć w treści wpisu na blogu (Markdown) - do kopii zapasowej.
+# Odwołania do wgranych zdjęć w adresach i treści wpisów na blogu (Markdown).
 BLOG_UPLOAD_REF_RE = re.compile(r"/static/uploads/([A-Za-z0-9_-]+\.[A-Za-z0-9]+)")
+
+
+def image_names_in(*texts) -> set:
+    """Nazwy plików z static/uploads wskazane w podanych adresach lub treściach."""
+    return {name for text in texts for name in BLOG_UPLOAD_REF_RE.findall(text or "")}
 
 # Strony publiczne, które service worker (PWA) może zapisać do czytania offline.
 OFFLINE_CACHEABLE_ENDPOINTS = {
@@ -304,6 +348,11 @@ def create_app(config_class=None):
     limiter = Limiter(key_func=get_remote_address, default_limits=[])
     limiter.init_app(app)
     app.extensions["recipe_limiter"] = limiter
+    if app.config.get("APP_ENV") == "production" and app.config["RATELIMIT_STORAGE_URI"].startswith("memory"):
+        app.logger.warning(
+            "RATELIMIT_STORAGE_URI=memory:// - przy kilku workerach każdy liczy limity osobno. "
+            "Ustaw redis://... (patrz README)."
+        )
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
@@ -320,6 +369,20 @@ def create_app(config_class=None):
     def inject_csp_nonce():
         # W szablonach: <script nonce="{{ csp_nonce }}">
         return {"csp_nonce": _csp_nonce()}
+
+    @app.after_request
+    def remove_unused_images(response):
+        """Usuwa pliki zgłoszone przez _queue_image_cleanup, do których nic już nie odsyła.
+        Decyduje stan bazy po żądaniu, więc nieudany zapis niczego nie skasuje, a plik
+        używany też przez inny przepis lub wpis zostaje na dysku."""
+        pending = g.pop("image_cleanup", None)
+        if pending:
+            try:
+                db.session.rollback()  # niezatwierdzone zmiany nie mogą udawać braku odwołania
+                _remove_image_files(pending - _referenced_image_names())
+            except Exception:  # sprzątanie nie może zepsuć odpowiedzi; zostaje flask cleanup-images
+                app.logger.exception("Nie udało się usunąć nieużywanych zdjęć")
+        return response
 
     @app.after_request
     def set_security_headers(response):
@@ -417,7 +480,11 @@ def create_app(config_class=None):
 
         recipes_query = Recipe.query.filter(Recipe.status == "published")
         if query:
-            recipes_query = recipes_query.filter(Recipe.title.ilike(f"%{_escape_like(query)}%", escape="\\"))
+            # Zapytanie z samych znaków łączących byłoby po normalizacji puste i pasowało do wszystkiego.
+            folded_query = fold_search_text(query)
+            recipes_query = recipes_query.filter(
+                Recipe.title_search.like(f"%{_escape_like(folded_query)}%", escape="\\") if folded_query else false()
+            )
         active_tag = None
         if tag_slug:
             active_tag = Tag.query.filter_by(slug=tag_slug).first()
@@ -1111,8 +1178,9 @@ def create_app(config_class=None):
     @login_required
     @admin_required
     def recipe_create():
-        if request.method == "POST":
-            recipe = Recipe(author_id=current_user.id, status="published")
+        if request.method == "POST" and _recipe_numbers_ok():
+            recipe = Recipe(author_id=current_user.id)
+            recipe.publish()
             db.session.add(recipe)
             _save_recipe_form(recipe)
             db.session.commit()
@@ -1135,11 +1203,10 @@ def create_app(config_class=None):
     @admin_required
     def recipe_edit(recipe_id):
         recipe = db.session.get(Recipe, recipe_id) or abort(404)
-        if request.method == "POST":
+        if request.method == "POST" and _recipe_numbers_ok():
             _save_recipe_form(recipe)
             # Admin zapisujący formularz automatycznie zatwierdza przepis (jeśli czekał w kolejce).
-            recipe.status = "published"
-            recipe.rejection_reason = None
+            _approve_changes(recipe)
             db.session.commit()
             flash("Przepis został zaktualizowany i opublikowany.", "success")
             return redirect(url_for("admin_dashboard"))
@@ -1160,6 +1227,7 @@ def create_app(config_class=None):
     @admin_required
     def recipe_delete(recipe_id):
         recipe = db.session.get(Recipe, recipe_id) or abort(404)
+        _queue_image_cleanup(image_names_in(recipe.image_url, recipe.previous_image_url))
         db.session.delete(recipe)
         db.session.commit()
         flash("Przepis został usunięty.", "success")
@@ -1179,8 +1247,7 @@ def create_app(config_class=None):
     @admin_required
     def recipe_approve(recipe_id):
         recipe = db.session.get(Recipe, recipe_id) or abort(404)
-        recipe.status = "published"
-        recipe.rejection_reason = None
+        _approve_changes(recipe)
         db.session.commit()
         flash(f"Przepis „{recipe.title}” został opublikowany.", "success")
         return redirect(url_for("review_queue"))
@@ -1192,8 +1259,9 @@ def create_app(config_class=None):
         recipe = db.session.get(Recipe, recipe_id) or abort(404)
         recipe.status = "rejected"
         recipe.rejection_reason = request.form.get("reason", "").strip() or None
+        restored = _restore_approved_image(recipe)
         db.session.commit()
-        flash(f"Przepis „{recipe.title}” został odrzucony.", "success")
+        flash(f"Przepis „{recipe.title}” został odrzucony.{restored}", "success")
         return redirect(url_for("review_queue"))
 
     # ---------- zarządzanie kontami redaktorów ----------
@@ -1287,7 +1355,7 @@ def create_app(config_class=None):
     @login_required
     @redaktor_or_admin_required
     def redaktor_recipe_create():
-        if request.method == "POST":
+        if request.method == "POST" and _recipe_numbers_ok():
             recipe = Recipe(author_id=current_user.id, status="pending")
             db.session.add(recipe)
             _save_recipe_form(recipe)
@@ -1313,8 +1381,10 @@ def create_app(config_class=None):
         recipe = db.session.get(Recipe, recipe_id) or abort(404)
         if recipe.author_id != current_user.id and not current_user.is_admin:
             abort(403)
-        if request.method == "POST":
+        if request.method == "POST" and _recipe_numbers_ok():
+            approved_image_url = recipe.image_url
             _save_recipe_form(recipe)
+            _hold_approved_image(recipe, approved_image_url)
             # Każda zmiana redaktora (nawet w już opublikowanym przepisie) wraca do kolejki
             # zatwierdzania - administrator musi ponownie potwierdzić treść.
             recipe.status = "pending"
@@ -1341,9 +1411,12 @@ def create_app(config_class=None):
         recipe = db.session.get(Recipe, recipe_id) or abort(404)
         if recipe.author_id != current_user.id and not current_user.is_admin:
             abort(403)
-        if recipe.status == "published" and not current_user.is_admin:
-            flash("Opublikowany przepis może usunąć tylko administrator.", "error")
+        # Sprawdzamy historię, nie bieżący status: edycja redaktora cofa przepis do kolejki,
+        # więc sam status "pending" nie oznacza, że przepis nigdy nie był publiczny.
+        if recipe.was_published and not current_user.is_admin:
+            flash("Przepis, który był już opublikowany, może usunąć tylko administrator.", "error")
             return redirect(url_for("redaktor_dashboard"))
+        _queue_image_cleanup(image_names_in(recipe.image_url, recipe.previous_image_url))
         db.session.delete(recipe)
         db.session.commit()
         flash("Przepis został usunięty.", "success")
@@ -1522,7 +1595,7 @@ def create_app(config_class=None):
         if request.method == "POST":
             if _save_blog_form(post):
                 # Admin zapisujący formularz automatycznie zatwierdza wpis (jak przy przepisach).
-                post.publish()
+                _approve_changes(post)
                 db.session.commit()
                 flash("Wpis został zaktualizowany i opublikowany.", "success")
                 return redirect(url_for("admin_blog"))
@@ -1535,6 +1608,7 @@ def create_app(config_class=None):
     @admin_required
     def blog_delete(post_id):
         post = db.session.get(BlogPost, post_id) or abort(404)
+        _queue_image_cleanup(image_names_in(post.image_url, post.previous_image_url, post.content))
         db.session.delete(post)
         db.session.commit()
         flash("Wpis został usunięty.", "success")
@@ -1545,7 +1619,7 @@ def create_app(config_class=None):
     @admin_required
     def blog_approve(post_id):
         post = db.session.get(BlogPost, post_id) or abort(404)
-        post.publish()
+        _approve_changes(post)
         db.session.commit()
         flash(f"Wpis „{post.title}” został opublikowany.", "success")
         return redirect(url_for("admin_blog"))
@@ -1557,8 +1631,9 @@ def create_app(config_class=None):
         post = db.session.get(BlogPost, post_id) or abort(404)
         post.status = "rejected"
         post.rejection_reason = request.form.get("reason", "").strip() or None
+        restored = _restore_approved_image(post)
         db.session.commit()
-        flash(f"Wpis „{post.title}” został odrzucony.", "success")
+        flash(f"Wpis „{post.title}” został odrzucony.{restored}", "success")
         return redirect(url_for("admin_blog"))
 
     # ---------- blog: panel redaktora (wpisy wymagają zatwierdzenia) ----------
@@ -1584,7 +1659,9 @@ def create_app(config_class=None):
         if post.author_id != current_user.id and not current_user.is_admin:
             abort(403)
         if request.method == "POST":
+            approved_image_url = post.image_url
             if _save_blog_form(post):
+                _hold_approved_image(post, approved_image_url)
                 # Każda zmiana redaktora wraca do kolejki zatwierdzania.
                 post.status = "pending"
                 post.rejection_reason = None
@@ -1600,9 +1677,11 @@ def create_app(config_class=None):
         post = db.session.get(BlogPost, post_id) or abort(404)
         if post.author_id != current_user.id and not current_user.is_admin:
             abort(403)
-        if post.status == "published" and not current_user.is_admin:
-            flash("Opublikowany wpis może usunąć tylko administrator.", "error")
+        # Jak przy przepisach: edycja cofa wpis do kolejki, więc liczy się historia publikacji.
+        if post.was_published and not current_user.is_admin:
+            flash("Wpis, który był już opublikowany, może usunąć tylko administrator.", "error")
             return redirect(url_for("redaktor_dashboard"))
+        _queue_image_cleanup(image_names_in(post.image_url, post.previous_image_url, post.content))
         db.session.delete(post)
         db.session.commit()
         flash("Wpis został usunięty.", "success")
@@ -1662,8 +1741,10 @@ def create_app(config_class=None):
     def _save_blog_form(post: BlogPost) -> bool:
         """Przepisuje dane z formularza do wpisu. Zwraca False (z komunikatem flash), gdy
         brakuje wymaganych pól - wtedy wywołujący nie zapisuje zmian."""
+        _queue_image_cleanup(image_names_in(post.image_url, post.content))
         title = request.form.get("title", "").strip()[:150]
         content = request.form.get("content", "").strip()
+        new_slug_needed = needs_new_slug(post, title)
         post.title = title
         post.excerpt = request.form.get("excerpt", "").strip()[:300] or None
         post.content = content
@@ -1673,7 +1754,7 @@ def create_app(config_class=None):
 
         with db.session.no_autoflush:
             base_slug = slugify(title) or "wpis"
-            if post.slug != base_slug:
+            if new_slug_needed:
                 candidate = base_slug
                 counter = 2
                 while BlogPost.query.filter(
@@ -1747,6 +1828,10 @@ def create_app(config_class=None):
                     flash("Plik recipes.json ma nieprawidłową strukturę.", "error")
                     return redirect(url_for("backup_page"))
 
+                # Import może zastąpić dowolne zdjęcie, a kopia może zawierać zdjęcia, których nic
+                # nie użyje (np. w trybie "Dodaj tylko nowe") - sprawdzamy jedne i drugie po imporcie.
+                _queue_image_cleanup(_referenced_image_names())
+
                 if mode == "wipe":
                     # Czyścimy najpierw tabelę pośredniczącą (SQLAlchemy nie robi tego
                     # automatycznie przy masowym Query.delete()), potem przepisy i tagi.
@@ -1759,6 +1844,7 @@ def create_app(config_class=None):
                         BlogPost.query.delete()
 
                 image_name_map = _extract_backup_images(zf)
+                _queue_image_cleanup(image_name_map.values())
 
                 created = updated = 0
                 skipped = []
@@ -1825,7 +1911,8 @@ def create_app(config_class=None):
         - odrzucamy pliki, które nie są prawidłowymi obrazami (np. przemianowany
           skrypt, plik-polyglot łączący obraz z HTML/JS, uszkodzony plik),
         - usuwamy wszelkie metadane EXIF (mogą zawierać dane lokalizacji GPS,
-          model urządzenia itp. - ryzyko prywatności autora zdjęcia),
+          model urządzenia itp. - ryzyko prywatności autora zdjęcia), a wskazaną w nich
+          orientację zdjęcia nanosimy najpierw na piksele,
         - usuwamy dowolne dane doklejone do pliku poza właściwą treścią obrazu,
         - chronimy przed „bombami dekompresji" (plik deklarujący miliardy pikseli) -
           Pillow domyślnie rzuca tu wyjątkiem; dodatkowo ograniczamy maksymalny
@@ -1848,13 +1935,26 @@ def create_app(config_class=None):
         if detected_format not in SAFE_IMAGE_FORMATS:
             return None, "Niedozwolony format obrazka. Dozwolone: PNG, JPG, GIF, WEBP."
 
-        # Ograniczamy maksymalny wymiar - zmniejszamy proporcjonalnie, jeśli trzeba.
         max_dim = app.config["MAX_IMAGE_DIMENSION"]
-        if image.width > max_dim or image.height > max_dim:
-            image.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+        fits_max_dim = image.width <= max_dim and image.height <= max_dim
 
-        save_format = detected_format
+        # Animacje zapisujemy z wszystkimi klatkami. Zbyt duże (limit pikseli liczony łącznie dla
+        # klatek, jak ochrona przed bombami dekompresji) zostają nieruchomym obrazem z 1. klatki.
+        frames = 1 if detected_format == "MPO" else getattr(image, "n_frames", 1)
         save_kwargs = {}
+        if frames > 1 and fits_max_dim and image.width * image.height * frames <= Image.MAX_IMAGE_PIXELS:
+            try:
+                save_kwargs = animation_save_options(image)
+            except (OSError, ValueError, EOFError):
+                return None, "Plik nie jest prawidłowym obrazem (dozwolone: PNG, JPG, GIF, WEBP)."
+        else:
+            # Telefon zapisuje zdjęcie „na boku” z tagiem orientacji, a EXIF usuwamy.
+            image = ImageOps.exif_transpose(image)
+            # Ograniczamy maksymalny wymiar - zmniejszamy proporcjonalnie, jeśli trzeba.
+            if not fits_max_dim:
+                image.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+
+        save_format = "JPEG" if detected_format == "MPO" else detected_format
         if save_format == "JPEG":
             # JPEG nie obsługuje kanału alfa/palety - konwertujemy do RGB.
             if image.mode not in ("RGB", "L"):
@@ -1869,10 +1969,52 @@ def create_app(config_class=None):
             # Zapis BEZ przekazywania oryginalnych metadanych (brak exif=...) -
             # to jawnie usuwa EXIF i wszystko poza samą siatką pikseli obrazu.
             image.save(target_path, format=save_format, **save_kwargs)
-        except OSError as exc:
+        except (OSError, ValueError, EOFError) as exc:
             return None, f"Nie udało się zapisać obrazu: {exc}"
 
         return filename, None
+
+    def _queue_image_cleanup(names):
+        """Zgłasza pliki, które mogą przestać być używane po tym żądaniu."""
+        g.image_cleanup = g.get("image_cleanup", set()) | set(names)
+
+    def _hold_approved_image(item, old_image_url):
+        """Zachowuje zatwierdzone zdjęcie, które redaktor właśnie zastąpił albo usunął.
+        Zdjęcie przepisu niepublikowanego ani kolejna podmiana przed decyzją nie są
+        zatwierdzone, więc takich plików nie przechowujemy."""
+        if item.was_published and old_image_url and old_image_url != item.image_url and not item.previous_image_url:
+            item.previous_image_url = old_image_url
+
+    def _approve_changes(item):
+        """Publikuje przepis lub wpis i pozwala usunąć zachowane poprzednie zdjęcie."""
+        _queue_image_cleanup(image_names_in(item.previous_image_url))
+        item.previous_image_url = None
+        item.publish()
+
+    def _restore_approved_image(item) -> str:
+        """Po odrzuceniu zmian wraca zatwierdzone zdjęcie. Zwraca dopisek do komunikatu."""
+        if not item.previous_image_url:
+            return ""
+        _queue_image_cleanup(image_names_in(item.image_url))
+        item.image_url = item.previous_image_url
+        item.previous_image_url = None
+        return " Przywrócono poprzednie zdjęcie."
+
+    def _referenced_image_names() -> set:
+        """Wszystkie pliki z static/uploads, do których odsyła baza."""
+        rows = db.session.query(Recipe.image_url, Recipe.previous_image_url).all() + db.session.query(
+            BlogPost.image_url, BlogPost.previous_image_url, BlogPost.content
+        ).all()
+        return image_names_in(*(value for row in rows for value in row))
+
+    def _remove_image_files(names):
+        for name in names:
+            try:
+                os.remove(os.path.join(app.config["UPLOAD_FOLDER"], name))
+            except FileNotFoundError:
+                pass
+            except OSError:
+                app.logger.exception("Nie udało się usunąć zdjęcia %s", name)
 
     def _save_uploaded_image():
         """Sanityzuje i zapisuje przesłany/wklejony plik graficzny, zwraca jego publiczny URL."""
@@ -1938,8 +2080,12 @@ def create_app(config_class=None):
                         "pan_length_cm": recipe.pan_length_cm,
                         "tags": [tag.name for tag in recipe.tags],
                         "image_filename": image_filename,
+                        "previous_image_filename": add_image(recipe.previous_image_url.rsplit("/", 1)[-1])
+                        if recipe.previous_image_url
+                        else None,
                         "status": recipe.status,
                         "rejection_reason": recipe.rejection_reason,
+                        "published_at": recipe.published_at.isoformat() if recipe.published_at else None,
                         "author_username": recipe.author.username if recipe.author else None,
                         "created_at": recipe.created_at.isoformat() if recipe.created_at else None,
                         "updated_at": recipe.updated_at.isoformat() if recipe.updated_at else None,
@@ -1961,6 +2107,9 @@ def create_app(config_class=None):
                         "content": post.content,
                         "image_filename": image_filename,
                         "content_images": content_images,
+                        "previous_image_filename": add_image(post.previous_image_url.rsplit("/", 1)[-1])
+                        if post.previous_image_url
+                        else None,
                         "status": post.status,
                         "rejection_reason": post.rejection_reason,
                         "author_username": post.author.username if post.author else None,
@@ -1989,6 +2138,12 @@ def create_app(config_class=None):
 
         buffer.seek(0)
         return buffer
+
+    def _restore_previous_image(item, data: dict, image_name_map: dict):
+        """Odtwarza zachowane poprzednie zdjęcie. Starsze kopie nie mają tego pola."""
+        original = data.get("previous_image_filename")
+        name = image_name_map.get(original) if isinstance(original, str) else None
+        item.previous_image_url = url_for("static", filename=f"uploads/{name}") if name else None
 
     # ---------- kopia zapasowa: wpisy na blogu ----------
     def _restore_blog_post_from_backup(data: dict, mode: str, image_name_map: dict):
@@ -2023,6 +2178,7 @@ def create_app(config_class=None):
         original_image = data.get("image_filename")
         if original_image and original_image in image_name_map:
             post.image_url = url_for("static", filename=f"uploads/{image_name_map[original_image]}")
+        _restore_previous_image(post, data, image_name_map)
 
         status = data.get("status")
         post.status = status if status in RECIPE_STATUSES else "pending"
@@ -2179,6 +2335,12 @@ def create_app(config_class=None):
         return name_map
 
     # ---------- kopia zapasowa: odtwarzanie pojedynczego przepisu ----------
+    def _backup_count(value):
+        """Nieujemna liczba całkowita z pliku kopii zapasowej albo None (json przepuszcza też NaN)."""
+        if isinstance(value, (int, float)) and math.isfinite(value) and value >= 0:
+            return int(value)
+        return None
+
     def _restore_recipe_from_backup(data: dict, mode: str, image_name_map: dict):
         """Tworzy nowy przepis albo aktualizuje istniejący (po slugu) na podstawie
         wpisu z pliku recipes.json. Zwraca (recipe_lub_None, opis_akcji)."""
@@ -2226,8 +2388,7 @@ def create_app(config_class=None):
             steps = [str(s).strip() for s in (data.get("instructions") or []) if str(s).strip()]
             recipe.instructions = "\n".join(steps)
 
-            servings = data.get("servings")
-            recipe.servings = int(servings) if isinstance(servings, (int, float)) else None
+            recipe.servings = _backup_count(data.get("servings"))
             prep_time = data.get("prep_time_min")
             recipe.prep_time_min = (
                 int(prep_time) if isinstance(prep_time, (int, float)) and 0 < prep_time <= 10080 else None
@@ -2237,21 +2398,10 @@ def create_app(config_class=None):
 
             pan_shape = data.get("pan_shape")
             recipe.pan_shape = pan_shape if pan_shape in PAN_SHAPES else None
-            recipe.pan_size_cm = (
-                int(data["pan_size_cm"])
-                if recipe.pan_shape == "okragla" and isinstance(data.get("pan_size_cm"), (int, float))
-                else None
-            )
-            recipe.pan_width_cm = (
-                int(data["pan_width_cm"])
-                if recipe.pan_shape == "prostokatna" and isinstance(data.get("pan_width_cm"), (int, float))
-                else None
-            )
-            recipe.pan_length_cm = (
-                int(data["pan_length_cm"])
-                if recipe.pan_shape == "prostokatna" and isinstance(data.get("pan_length_cm"), (int, float))
-                else None
-            )
+            recipe.pan_size_cm = _backup_count(data.get("pan_size_cm")) if recipe.pan_shape == "okragla" else None
+            is_rectangular = recipe.pan_shape == "prostokatna"
+            recipe.pan_width_cm = _backup_count(data.get("pan_width_cm")) if is_rectangular else None
+            recipe.pan_length_cm = _backup_count(data.get("pan_length_cm")) if is_rectangular else None
 
             tags = []
             for name in data.get("tags") or []:
@@ -2277,6 +2427,10 @@ def create_app(config_class=None):
             status = data.get("status")
             recipe.status = status if status in RECIPE_STATUSES else "published"
             recipe.rejection_reason = str(data.get("rejection_reason") or "").strip() or None
+            # Starsze kopie nie mają tego pola - wtedy zostaje dotychczasowa data.
+            recipe.published_at = _parse_backup_datetime(data.get("published_at")) or recipe.published_at
+            if recipe.status == "published" and recipe.published_at is None:
+                recipe.published_at = datetime.utcnow()
 
             # Zdjęcie podmieniamy tylko, jeśli archiwum je zawierało; w przeciwnym razie
             # zostawiamy dotychczasowe (przy aktualizacji) albo brak zdjęcia (przy nowym).
@@ -2285,12 +2439,13 @@ def create_app(config_class=None):
                 recipe.image_url = url_for(
                     "static", filename=f"uploads/{image_name_map[original_image_name]}"
                 )
+            _restore_previous_image(recipe, data, image_name_map)
 
         return recipe, f"{note_prefix}: „{recipe.title}”"
 
-    def _build_ingredients_text():
+    def _ingredient_entries_from_form():
         """
-        Buduje tekst składników do zapisania w bazie. Preferuje ustrukturyzowane pole
+        Zwraca wpisy składników z formularza. Preferuje ustrukturyzowane pole
         `ingredients_structured` (JSON zbudowany przez JS tuż przed wysłaniem formularza -
         pozwala przeplatać nagłówki sekcji ze zwykłymi składnikami w dowolnej kolejności).
         Jeśli go brak (np. JS wyłączony), spada do starych, płaskich pól name[]/amount[]/unit[]
@@ -2323,7 +2478,23 @@ def create_app(config_class=None):
                 for a, u, n, k, p, f, c in zip(amounts, units, names, kcals, proteins, fats, carbs_list)
             ]
 
-        return serialize_ingredient_entries(entries)
+        return entries
+
+    def _recipe_numbers_ok() -> bool:
+        """False (z komunikatem flash), gdy formularz zawiera wartość ujemną - wtedy wywołujący
+        nie zapisuje przepisu. Przeglądarka też to blokuje, ale żądanie można wysłać z pominięciem
+        formularza. Sprawdzamy przed zmianą obiektu, więc odrzucenie niczego nie nadpisuje."""
+        values = [
+            request.form.get(field)
+            for field in ("servings", "prep_time_min", "pan_size_cm", "pan_width_cm", "pan_length_cm")
+        ]
+        for entry in _ingredient_entries_from_form():
+            if isinstance(entry, dict) and entry.get("type") == "item":
+                values += [entry.get(key) for key in ("amount", "kcal", "protein", "fat", "carbs")]
+        if any(is_negative_text(value) for value in values):
+            flash("Wartości liczbowe w przepisie nie mogą być ujemne.", "error")
+            return False
+        return True
 
     def _build_instructions_text():
         steps = [s.strip() for s in request.form.getlist("step[]") if s.strip()]
@@ -2356,7 +2527,9 @@ def create_app(config_class=None):
         recipe.tags = tags
 
     def _save_recipe_form(recipe: Recipe):
+        _queue_image_cleanup(image_names_in(recipe.image_url))
         title = request.form.get("title", "").strip()
+        new_slug_needed = needs_new_slug(recipe, title)
         recipe.title = title
 
         # Wszelkie zapytania do bazy w trakcie wypełniania formularza (sprawdzanie unikalności
@@ -2365,7 +2538,7 @@ def create_app(config_class=None):
         with db.session.no_autoflush:
             # Slug generujemy tylko jeśli tytuł się zmienił / to nowy przepis
             base_slug = slugify(title) or "przepis"
-            if recipe.slug != base_slug:
+            if new_slug_needed:
                 candidate = base_slug
                 counter = 2
                 while Recipe.query.filter(
@@ -2376,7 +2549,7 @@ def create_app(config_class=None):
                 recipe.slug = candidate
 
             recipe.description = request.form.get("description", "").strip()
-            recipe.ingredients = _build_ingredients_text()
+            recipe.ingredients = serialize_ingredient_entries(_ingredient_entries_from_form())
             recipe.instructions = _build_instructions_text()
             _save_tags(recipe)
 
@@ -2478,6 +2651,30 @@ def create_app(config_class=None):
         user.register_successful_login()
         db.session.commit()
         click.echo(f"Odblokowano konto: {username}")
+
+    @app.cli.command("cleanup-images")
+    @click.option("--apply", is_flag=True, help="Naprawdę usuń pliki (bez tego tylko je wypisuje).")
+    @click.option("--min-age-hours", default=24, show_default=True, type=click.IntRange(min=1),
+                  help="Pomija nowsze pliki - zdjęcia wgrane do wpisu, który nie został jeszcze zapisany.")
+    def cleanup_images(apply, min_age_hours):
+        """Znajduje w static/uploads pliki, do których nic nie odsyła (np. zdjęcia z niezapisanych wpisów)."""
+        used = _referenced_image_names()
+        if not used:
+            # Puste odwołania to najpewniej zła baza (DATABASE_URL), a nie brak zdjęć.
+            raise click.ClickException("Baza nie odsyła do żadnego zdjęcia - przerywam, sprawdź DATABASE_URL.")
+        folder = app.config["UPLOAD_FOLDER"]
+        newest_allowed = time.time() - min_age_hours * 3600
+        unused = [
+            name for name in sorted(os.listdir(folder))
+            if image_names_in(f"/static/uploads/{name}") == {name}
+            and name not in used
+            and os.path.getmtime(os.path.join(folder, name)) < newest_allowed
+        ]
+        for name in unused:
+            click.echo(name)
+        if apply:
+            _remove_image_files(unused)
+        click.echo(f"{'Usunięto' if apply else 'Do usunięcia (dodaj --apply)'}: {len(unused)}")
 
     @app.cli.command("export-backup")
     @click.option("--output", "-o", required=True, type=click.Path(dir_okay=False, writable=True),

@@ -295,6 +295,14 @@
       ingredientsWrapper.lastElementChild.querySelector(".section-name-input").focus();
     });
 
+    // Pola liczbowe nie przyjmują minusa (wpisanego ani wklejonego). Gdyby przeglądarka nie
+    // obsłużyła tego zdarzenia, wysłanie formularza zablokują atrybuty min i pattern.
+    document.getElementById("recipeForm").addEventListener("beforeinput", (e) => {
+      if (e.target.matches('.ing-amount, .ing-nutrition, input[type="number"]') && /[-\u2212\u2013]/.test(e.data || "")) {
+        e.preventDefault();
+      }
+    });
+
     // Przed wysłaniem zapisujemy składniki i sekcje w kolejności, w jakiej widać je na ekranie.
     document.getElementById("recipeForm").addEventListener("submit", () => {
       const entries = [];

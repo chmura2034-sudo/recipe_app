@@ -30,4 +30,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
 
 # Migracje uruchamiaj osobno przed startem (patrz docker-compose.yml.example) -
 # kontener aplikacji NIE modyfikuje schematu bazy przy starcie.
-CMD ["gunicorn", "--workers", "4", "--bind", "0.0.0.0:8000", "--access-logfile", "-", "--error-logfile", "-", "wsgi:app"]
+CMD ["gunicorn", "--workers", "4", "--timeout", "120", "--bind", "0.0.0.0:8000", "--access-logfile", "-", "--error-logfile", "-", "wsgi:app"]

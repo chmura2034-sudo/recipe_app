@@ -10,7 +10,8 @@
 
 [Unit]
 Description=Wielka Ksiega Przepisow (Flask + gunicorn)
-After=network.target
+After=network.target redis-server.service
+Wants=redis-server.service
 
 [Service]
 Type=simple
@@ -20,6 +21,7 @@ WorkingDirectory=/opt/recipe-app
 EnvironmentFile=/opt/recipe-app/.env
 ExecStart=/opt/recipe-app/venv/bin/gunicorn \
     --workers 4 \
+    --timeout 120 \
     --bind 127.0.0.1:8000 \
     --access-logfile - \
     --error-logfile - \

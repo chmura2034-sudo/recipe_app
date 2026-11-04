@@ -7,7 +7,7 @@ patrz sekcja „Role” niżej).
 
 ## Funkcje
 
-- Lista przepisów + wyszukiwarka po tytule i filtrowanie po tagach
+- Lista przepisów + wyszukiwarka po tytule (bez względu na wielkość liter i polskie znaki: `zurek` znajdzie „Żurek”) i filtrowanie po tagach
 - Strona szczegółów przepisu (składniki, kroki z checklistą wykonania, forma, porcje)
 - Przeliczanie przepisu wg liczby porcji lub wielkości/kształtu formy (okrągła ↔ kwadratowa/prostokątna)
 - **Dwie role kont**: administrator (pełne prawa) i redaktor (może dodawać/edytować
@@ -62,7 +62,8 @@ jednowątkowy, bez obsługi wielu równoczesnych połączeń. Do wdrożenia patr
 
 Aplikacja czyta zmienne ze środowiska oraz z pliku `.env` w katalogu projektu
 (`python-dotenv`; zmienne ustawione w środowisku mają pierwszeństwo). Plik `.env` nie trafia
-do repozytorium (patrz `.gitignore`). Najważniejsze zmienne:
+do repozytorium (patrz `.gitignore`). Pełną listę z opisami i wartościami domyślnymi znajdziesz
+w `.env.example`. Najważniejsze zmienne:
 
 | Zmienna                  | Opis                                                                 | Domyślnie (production) |
 |---------------------------|-----------------------------------------------------------------------|--------------------------|
@@ -72,9 +73,9 @@ do repozytorium (patrz `.gitignore`). Najważniejsze zmienne:
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Domyślne dane dla `flask create-admin` (bez podania opcji)   | -                         |
 | `PROXY_COUNT`              | Liczba serwerów proxy PRZED aplikacją (nginx, Cloudflare Tunnel...)   | `0`                       |
 | `SESSION_COOKIE_SECURE`    | Ciasteczko sesji tylko po HTTPS                                       | `true`                    |
-| `RATELIMIT_STORAGE_URI`    | Magazyn liczników limitu logowań - `redis://...` przy kilku workerach | `memory://` (1 proces)    |
+| `RATELIMIT_STORAGE_URI`    | Magazyn liczników limitów (logowanie, komentarze, oceny) - na produkcji `redis://...` | `memory://` (1 proces)    |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MINUTES` | Próg i czas blokady konta po nieudanych logowaniach | `5` / `15`                |
-| `MAX_UPLOAD_MB`            | Limit rozmiaru przesyłanego pliku (zdjęcia)                            | `8`                       |
+| `MAX_UPLOAD_MB`            | Limit rozmiaru żądania w aplikacji (zdjęcia, import kopii zapasowej)   | `100`                     |
 | `BACKUP_MAX_UNCOMPRESSED_MB` | Limit rozpakowanego rozmiaru importowanej kopii zapasowej            | `300`                     |
 | `TRUSTED_HOSTS`            | Dozwolone domeny (nagłówek Host), po przecinku; `localhost`/`127.0.0.1` dopisywane zawsze | *(puste - brak sprawdzania, ostrzeżenie w logu)* |
 | `PRIVACY_CONTROLLER`       | Administrator danych (imię i nazwisko / firma, adres) na stronie `/polityka-prywatnosci` | *(puste - strona pokazuje „uzupełnij")* |
@@ -90,6 +91,7 @@ recipe_app/
 ├── wsgi.py                       # punkt wejścia dla gunicorna
 ├── requirements.txt
 ├── .env                          # zmienne środowiskowe (tworzysz sam, poza repozytorium)
+├── .env.example                  # wzór pliku .env ze wszystkimi zmiennymi
 ├── .gitignore
 ├── Dockerfile
 ├── .dockerignore                 # .env, baza, zdjęcia, venv, .git NIE trafiają do obrazu
@@ -159,9 +161,51 @@ Regularnie pobieraj kopię zapasową i trzymaj ją **poza serwerem** (dysk w chm
 Z poziomu przeglądarki służy do tego przycisk na `/admin/kopia-zapasowa`; do automatyzacji
 (np. przez `cron`) użyj polecenia `flask export-backup` - patrz sekcja „Wdrożenie produkcyjne”.
 
-Uwaga: import nie usuwa automatycznie plików zdjęć osieroconych po trybie „Zastąp wszystko”
-(stare pliki zostają na dysku w `static/uploads/`, ale nie są już z niczym powiązane) -
-to świadome uproszczenie, które nie wpływa na poprawność działania aplikacji.
+### Duże kopie zapasowe (limit rozmiaru)
+
+Import kopii zapasowej ogranicza kilka ustawień serwera. Zdjęcia w archiwum prawie się nie
+kompresują, więc plik `.zip` ma mniej więcej tyle, ile zajmuje `static/uploads/`. Rozmiar
+sprawdzisz poleceniem `du -sh static/uploads` lub po prostu po pobranym pliku kopii.
+
+Domyślnie kopia może mieć do **100 MB**. Jeśli urośnie, zanim wgrasz ją przy odtwarzaniu,
+podnieś **razem**:
+
+| Gdzie | Ustawienie | Domyślnie |
+|---|---|---|
+| `.env` | `MAX_UPLOAD_MB` | `100` |
+| nginx, `location = /admin/kopia-zapasowa/import` | `client_max_body_size` (nieco więcej niż `MAX_UPLOAD_MB`) | `110m` |
+| `.env` | `BACKUP_MAX_UNCOMPRESSED_MB` (rozmiar po rozpakowaniu) | `300` |
+| gunicorn (`--timeout` w usłudze systemd lub `Dockerfile`) oraz nginx (`proxy_read_timeout`) | czas na przetworzenie zdjęć | `120` s |
+
+Po zmianie uruchom ponownie aplikację i przeładuj nginx (`sudo nginx -t && sudo systemctl reload nginx`).
+Porównuj rozmiar pobieranej kopii z limitem **zawczasu** - przywracanie po awarii to zły moment
+na odkrycie, że plik się nie mieści. Jeśli nginx odrzuci plik, zobaczysz jego stronę `413`;
+jeśli aplikacja - komunikat z limitem `MAX_UPLOAD_MB`.
+
+### Usuwanie zdjęć z dysku
+
+Plik zdjęcia znika ze `static/uploads/`, gdy nic już do niego nie odsyła: po zastąpieniu lub
+usunięciu zdjęcia, usunięciu przepisu lub wpisu, wycięciu zdjęcia z treści wpisu i po imporcie
+kopii. Plik używany jeszcze gdzie indziej zostaje.
+
+Gdy redaktor zastąpi lub usunie zdjęcie w opublikowanym przepisie albo wpisie, poprzedni plik
+zostaje do decyzji administratora. Zatwierdzenie zmian go usuwa, a odrzucenie przywraca to
+zdjęcie. Treść wraca do redaktora bez zmian, więc nowe zdjęcie trzeba wtedy wgrać ponownie.
+
+Zdjęcia wgrane do wpisu, który nie został ostatecznie zapisany, oraz pliki sprzed tej funkcji
+usuwa polecenie (najpierw tylko wypisuje, co by usunęło):
+
+```bash
+flask cleanup-images           # lista plików
+flask cleanup-images --apply   # usunięcie; pomija pliki młodsze niż 24 h (--min-age-hours)
+```
+
+W opcji A: `docker compose exec app flask cleanup-images`. Uruchamiaj je z tym samym `.env` co
+aplikację. Przy pustej bazie polecenie odmawia działania, ale z bazą inną niż produkcyjna
+uznałoby pliki produkcyjne za nieużywane.
+
+**Usunięcie z serwera nie sięga do pamięci podręcznej:** kto widział zdjęcie, może mieć jego kopię
+w przeglądarce (cache i aplikacja offline).
 
 ## Migracje bazy danych
 
@@ -251,8 +295,9 @@ Aplikacja zawiera kilka wbudowanych zabezpieczeń:
     a zwykłe duże zdjęcia proporcjonalnie zmniejszane (`MAX_IMAGE_DIMENSION` w `config.py`),
   - plik zapisywany jest pod nową, losową nazwą (UUID) - nazwa nadana przez użytkownika
     nigdy nie trafia na dysk ani do adresu URL.
-  Limit rozmiaru przesyłanego pliku (`MAX_CONTENT_LENGTH`, domyślnie 8 MB) chroni dodatkowo
-  przed zapychaniem serwera bardzo dużymi plikami.
+  Przed zapychaniem serwera bardzo dużymi plikami chronią limity nginx (`client_max_body_size`,
+  w przykładowej konfiguracji 10 MB, a 110 MB tylko dla importu kopii zapasowej) oraz aplikacji
+  (`MAX_UPLOAD_MB`, domyślnie 100 MB, musi zmieścić kopię zapasową). Bez nginx obowiązuje tylko ten drugi.
 - **Limit prób logowania** - dwie niezależne warstwy ochrony przed atakiem brute-force:
   - limit na poziomie adresu IP przez Flask-Limiter (`LOGIN_RATE_LIMIT` w `config.py`,
     domyślnie 10 prób/minutę i 30/godzinę na jeden adres IP, niezależnie od loginu),
@@ -320,7 +365,8 @@ cd /opt/recipe-app
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-Utwórz `/opt/recipe-app/.env` (np. `nano .env`) - minimalna konfiguracja produkcyjna:
+Utwórz `/opt/recipe-app/.env` (`cp .env.example .env`, potem `nano .env`) - minimalna konfiguracja
+produkcyjna:
 
 ```ini
 APP_ENV=production
@@ -331,6 +377,8 @@ PROXY_COUNT=1
 TRUSTED_HOSTS=twoja-domena.pl
 # Tylko opcja B: baza w osobnym katalogu (patrz krok B3). W opcji A ustawia to docker-compose.
 DATABASE_URL=sqlite:////opt/recipe-app/data/recipes.db
+# Tylko opcja B: liczniki limitów w Redisie (patrz krok B2a). W opcji A ustawia to docker-compose.
+RATELIMIT_STORAGE_URI=redis://127.0.0.1:6379/0
 # Opcjonalnie: domyślny login dla `flask create-admin`
 ADMIN_USERNAME=admin
 ```
@@ -441,6 +489,17 @@ w SQLite tryb WAL - obok `recipes.db` muszą móc powstać pliki `recipes.db-wal
 `recipes.db-shm`. Jednostka systemd ma `ProtectSystem=strict`, czyli zapisywać można tylko
 w katalogach z `ReadWritePaths`; samo `recipes.db` w katalogu projektu nie wystarczy.
 
+**B2a. Redis** - gunicorn działa w 4 workerach, więc limity prób logowania muszą być liczone
+wspólnie (w opcji A kontener Redisa uruchamia `docker-compose`):
+
+```bash
+sudo apt install -y redis-server
+sudo systemctl enable --now redis-server
+redis-cli ping      # powinno odpowiedzieć PONG
+```
+
+Domyślnie Redis w Debianie/Ubuntu słucha tylko na `127.0.0.1` - nie otwieraj jego portu na zewnątrz.
+
 **B3. Uprawnienia `.env`** - aplikacja (jako `www-data`) też czyta ten plik:
 
 ```bash
@@ -490,8 +549,9 @@ sudo rm -f /etc/nginx/sites-enabled/default        # domyślna strona „Welcome
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-`client_max_body_size` w konfiguracji nginx musi być nieco większy niż `MAX_UPLOAD_MB`
-z `.env` - inaczej duże zdjęcia skończą się błędem 413.
+Zdjęcia ogranicza ogólny `client_max_body_size` (10 MB). Dla importu kopii zapasowej nginx ma
+osobny limit, który musi być nieco większy niż `MAX_UPLOAD_MB` z `.env` - patrz
+„Duże kopie zapasowe (limit rozmiaru)”.
 
 **Aktualizacja do nowej wersji:**
 
@@ -592,7 +652,7 @@ Kopie regularnie przenoś **poza serwer** (np. `rsync`/`rclone` do chmury).
 | Logowanie „nie działa” (wraca na stronę logowania), błąd CSRF | Strona otwarta po zwykłym `http://` - ciasteczko sesji jest tylko dla HTTPS. Wejdź przez `https://` i sprawdź `PROXY_COUNT=1`. |
 | `attempt to write a readonly database` / `unable to open database file` | Katalog z bazą nie należy do `www-data` albo nie ma go w `ReadWritePaths` (krok B2 i B5). |
 | Błąd przy zapisie zdjęcia | `static/uploads` nie należy do `www-data` / brak w `ReadWritePaths`. |
-| `413 Request Entity Too Large` | Zwiększ `client_max_body_size` w nginx (powyżej `MAX_UPLOAD_MB`). |
+| `413 Request Entity Too Large` | Przy zdjęciu: plik przekracza ogólny `client_max_body_size` (10 MB). Przy imporcie kopii: patrz „Duże kopie zapasowe (limit rozmiaru)”. |
 | Konto admina zablokowane po błędnych hasłach | `flask unlock-user --username admin` (w opcji A przez `docker compose exec app ...`). |
 
 ### Lista kontrolna przed pierwszym uruchomieniem na produkcji
@@ -615,6 +675,8 @@ Kopie regularnie przenoś **poza serwer** (np. `rsync`/`rclone` do chmury).
 - [ ] Kopie zapasowe skonfigurowane (cron + `flask export-backup`) i trzymane **poza** serwerem.
 - [ ] Przy więcej niż jednym workerze gunicorna (domyślnie jest ich 4): `RATELIMIT_STORAGE_URI`
       wskazuje na Redis, a nie zostaje na `memory://` (inaczej każdy worker liczy próby
-      logowania osobno).
+      logowania osobno). W opcji A ustawia to `docker-compose.yml`, w opcji B patrz krok B2a.
+      Przy `memory://` na produkcji aplikacja zapisuje ostrzeżenie w logu. Gdy Redis jest
+      niedostępny, logowanie działa dalej, a limity są liczone osobno w każdym workerze.
 - [ ] `.env` nie trafia do systemu kontroli wersji (już w `.gitignore`) i nie jest czytelny dla
       innych użytkowników (`600`, w opcji B `640` z grupą `www-data`).

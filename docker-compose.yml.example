@@ -12,6 +12,11 @@ services:
     environment:
       # W kontenerze baza i zdjęcia żyją w wolumenach (patrz niżej), nie w warstwie obrazu.
       DATABASE_URL: sqlite:////data/recipes.db
+      # Liczniki limitów wspólne dla wszystkich workerów gunicorna.
+      RATELIMIT_STORAGE_URI: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
     volumes:
       - db-data:/data
       - uploads-data:/app/static/uploads
@@ -22,6 +27,18 @@ services:
       # X-Forwarded-For, omijając limity prób logowania per IP).
       # Wariant z tunelem WireGuard (patrz README, opcja C): "10.10.10.2:8000:8000".
       - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    # Liczniki limitów są krótkotrwałe, więc Redis niczego nie zapisuje na dysk.
+    # Brak sekcji "ports": usługa jest dostępna tylko dla aplikacji w sieci Dockera.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
 volumes:

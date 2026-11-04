@@ -67,7 +67,7 @@ class Config:
 
     # Zdjęcia muszą leżeć w katalogu static/, bo serwowane są jako /static/uploads/...
     UPLOAD_FOLDER = str(BASE_DIR / "static" / "uploads")
-    MAX_CONTENT_LENGTH = _env_int("MAX_UPLOAD_MB", 8) * 1024 * 1024  # limit rozmiaru żądania
+    MAX_CONTENT_LENGTH = _env_int("MAX_UPLOAD_MB", 100) * 1024 * 1024  # limit żądania (musi zmieścić kopię zapasową)
     MAX_IMAGE_DIMENSION = 4000  # px - większe obrazy są proporcjonalnie zmniejszane
 
     # Limity importu kopii zapasowej (ochrona przed „bombą ZIP").
@@ -82,6 +82,8 @@ class Config:
     # Magazyn liczników limitów. "memory://" działa tylko dla jednego procesu;
     # przy kilku workerach użyj współdzielonego, np. redis://redis:6379/0
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
+    # Awaria Redisa nie może wyłączyć logowania: limity działają wtedy w pamięci każdego workera.
+    RATELIMIT_IN_MEMORY_FALLBACK_ENABLED = True
     # Limity dla czytelników (per adres IP): dodawanie komentarzy i ocen.
     COMMENT_RATE_LIMIT = os.environ.get("COMMENT_RATE_LIMIT", "5 per 10 minutes;20 per day")
     RATING_RATE_LIMIT = os.environ.get("RATING_RATE_LIMIT", "20 per hour")

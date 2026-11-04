@@ -45,7 +45,7 @@
             <td>{{ recipe.updated_at.strftime('%Y-%m-%d %H:%M') if recipe.updated_at else '-' }}</td>
             <td class="admin-table-actions">
               <a class="btn btn-small" href="{{ url_for('redaktor_recipe_edit', recipe_id=recipe.id) }}">Edytuj</a>
-              {% if recipe.status != "published" %}
+              {% if not recipe.was_published %}
                 <form method="post" action="{{ url_for('redaktor_recipe_delete', recipe_id=recipe.id) }}"
                       data-confirm="Na pewno usunąć ten przepis?">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -85,7 +85,7 @@
             <td>{{ post.updated_at.strftime('%Y-%m-%d %H:%M') if post.updated_at else '-' }}</td>
             <td class="admin-table-actions">
               <a class="btn btn-small" href="{{ url_for('redaktor_blog_edit', post_id=post.id) }}">Edytuj</a>
-              {% if post.status != "published" %}
+              {% if not post.was_published %}
                 <form method="post" action="{{ url_for('redaktor_blog_delete', post_id=post.id) }}"
                       data-confirm="Na pewno usunąć ten wpis?">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

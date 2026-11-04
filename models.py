@@ -1,16 +1,21 @@
 import secrets
+import unicodedata
 from datetime import datetime
 
 import markdown
 import nh3
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import validates
 from werkzeug.security import check_password_hash, generate_password_hash
 
 db = SQLAlchemy()
 
 # Dozwolone jednostki miary składników.
 INGREDIENT_UNITS = ["g", "ml", "szt"]
+
+# Górna granica wartości odżywczej jednego składnika - większe liczby traktujemy jak brak danych.
+MAX_NUTRITION_VALUE = 1_000_000
 
 # Dozwolone role użytkowników.
 # admin -> pełne prawa (dodaje/edytuje/usuwa/zatwierdza wszystko)
@@ -115,6 +120,12 @@ class User(UserMixin, db.Model):
         return f"<User {self.username} ({self.role})>"
 
 
+def fold_search_text(text) -> str:
+    """Postać tekstu do wyszukiwania: małe litery, bez polskich znaków ('Żurek' -> 'zurek')."""
+    text = str(text).casefold().replace("ł", "l")
+    return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+
+
 class Recipe(db.Model):
     """Pojedynczy przepis kulinarny."""
 
@@ -122,6 +133,8 @@ class Recipe(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(150), nullable=False)
+    # Tytuł w postaci do wyszukiwania - ustawiany automatycznie przez set_title_search()
+    title_search = db.Column(db.Text, nullable=False, default="", server_default="")
     slug = db.Column(db.String(180), unique=True, nullable=False, index=True)
     description = db.Column(db.String(300))
     # Każda linia w formacie "ilość|jednostka|nazwa składnika", np. "200|g|mąki pszennej"
@@ -130,6 +143,8 @@ class Recipe(db.Model):
     instructions = db.Column(db.Text, nullable=False)
     servings = db.Column(db.Integer)
     image_url = db.Column(db.String(500))
+    # Zatwierdzone zdjęcie zastąpione przez redaktora - czeka na decyzję administratora
+    previous_image_url = db.Column(db.String(500))
     # Całkowity czas przygotowania w minutach oraz poziom trudności (klucz z DIFFICULTIES).
     prep_time_min = db.Column(db.Integer)
     difficulty = db.Column(db.String(20))
@@ -150,6 +165,8 @@ class Recipe(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Data pierwszej publikacji - nie znika, gdy przepis wraca do kolejki po edycji redaktora.
+    published_at = db.Column(db.DateTime)
 
     author_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     author = db.relationship("User", backref="recipes")
@@ -227,10 +244,14 @@ class Recipe(db.Model):
 
     @staticmethod
     def _to_float(value):
+        """Liczba z pola tekstowego albo None. float() przyjmuje też "nan", "inf" i "1e999",
+        więc zakres (który odrzuca również nieskończoności) chroni sumy i round() przed
+        wynikiem niebędącym liczbą. Wartości ujemne nie mają sensu i nie wchodzą do sum."""
         try:
-            return float(str(value).strip().replace(",", "."))
+            number = float(str(value).strip().replace(",", "."))
         except (TypeError, ValueError):
             return None
+        return number if 0 <= number <= MAX_NUTRITION_VALUE else None
 
     @property
     def nutrition_totals(self):
@@ -287,6 +308,23 @@ class Recipe(db.Model):
     @property
     def is_published(self):
         return self.status == "published"
+
+    @property
+    def was_published(self):
+        """Czy przepis był kiedykolwiek publiczny (także gdy teraz czeka w kolejce)."""
+        return self.published_at is not None
+
+    @validates("title")
+    def set_title_search(self, key, title):
+        self.title_search = fold_search_text(title or "")
+        return title
+
+    def publish(self):
+        """Oznacza przepis jako opublikowany (data publikacji ustawiana tylko za pierwszym razem)."""
+        self.status = "published"
+        self.rejection_reason = None
+        if self.published_at is None:
+            self.published_at = datetime.utcnow()
 
     @property
     def pan_dimensions_display(self):
@@ -381,6 +419,8 @@ class BlogPost(db.Model):
     excerpt = db.Column(db.String(300))
     content = db.Column(db.Text, nullable=False)
     image_url = db.Column(db.String(500))
+    # Zatwierdzone zdjęcie zastąpione przez redaktora - czeka na decyzję administratora
+    previous_image_url = db.Column(db.String(500))
 
     status = db.Column(db.String(20), nullable=False, default="published")
     rejection_reason = db.Column(db.Text)
@@ -412,6 +452,11 @@ class BlogPost(db.Model):
     @property
     def is_published(self):
         return self.status == "published"
+
+    @property
+    def was_published(self):
+        """Czy wpis był kiedykolwiek publiczny (także gdy teraz czeka w kolejce)."""
+        return self.published_at is not None
 
     def publish(self):
         """Oznacza wpis jako opublikowany (data publikacji ustawiana tylko za pierwszym razem)."""
