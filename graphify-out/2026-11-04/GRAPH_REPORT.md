@@ -1,7 +1,7 @@
 # Graph Report - recipe_app  (2026-11-04)
 
 ## Corpus Check
-- 23 files · ~33,445 words
+- 23 files · ~33,505 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 14 file(s) not represented in the graph (top: .example 6, (none) 5, .ini 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `03cfbda3`
+- Built from commit: `51654c41`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -191,7 +191,7 @@ Cohesion: 0.67
 Nodes (4): cleanup_images(), _referenced_image_names(), _remove_image_files(), remove_unused_images()
 
 ## Knowledge Gaps
-- **11 isolated node(s):** `Cooking / Recipe Preparation Theme`, `Red-Tinted Hand-Drawn Line-Art Style, Circular Crop`, `Environment variables (.env, APP_ENV, SECRET_KEY...)`, `Flask`, `Flask-Login` (+6 more)
+- **11 isolated node(s):** `Cooking / Recipe Preparation Theme`, `Red-Tinted Hand-Drawn Line-Art Style, Circular Crop`, `Flash messages block`, `Recipe title search form`, `Tag filter chips` (+6 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 172 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **8 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -202,7 +202,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.368) - this node is a cross-community bridge._
 - **Are the 9 inferred relationships involving `Recipe` (e.g. with `serialize_ingredient_entries()` and `Recipe approval queue (/admin/kolejka)`) actually correct?**
   _`Recipe` has 9 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `Cooking / Recipe Preparation Theme`, `Red-Tinted Hand-Drawn Line-Art Style, Circular Crop`, `Environment variables (.env, APP_ENV, SECRET_KEY...)` to the rest of the system?**
+- **What connects `Cooking / Recipe Preparation Theme`, `Red-Tinted Hand-Drawn Line-Art Style, Circular Crop`, `Flash messages block` to the rest of the system?**
   _11 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `create_app` be split into smaller, more focused modules?**
   _Cohesion score 0.07692307692307693 - nodes in this community are weakly interconnected._
