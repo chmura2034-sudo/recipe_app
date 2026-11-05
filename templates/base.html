@@ -34,6 +34,12 @@
       document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
       // Menu mobilne zwija się tylko z JavaScriptem - bez niego linki zostają widoczne.
       document.documentElement.classList.add("js");
+      // Już przeczytana informacja o ciasteczkach nie może mignąć przy wczytaniu strony.
+      try {
+        if (localStorage.getItem("cookie-notice-v1")) {
+          document.documentElement.classList.add("cookie-notice-seen");
+        }
+      } catch (e) {}
     })();
   </script>
   {% block head %}{% endblock %}
@@ -106,6 +112,14 @@
 
     {% block content %}{% endblock %}
   </main>
+
+  <aside class="cookie-notice" aria-label="Informacja o ciasteczkach">
+    <p>
+      Używamy tylko niezbędnych ciasteczek i pamięci przeglądarki, bez analityki i reklam.
+      <a href="{{ url_for('privacy_policy') }}#ciasteczka">Więcej informacji</a>
+    </p>
+    <button type="button" class="btn btn-small" data-cookie-notice-close>Rozumiem</button>
+  </aside>
 
   <footer class="footer">
     <img src="{{ url_for('static', filename='logo.png') }}" alt="" class="footer-logo">

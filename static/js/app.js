@@ -197,6 +197,15 @@
     });
   }
 
+  // Informacja o ciasteczkach: po zamknięciu nie wraca (patrz skrypt w base.html).
+  var cookieNoticeClose = document.querySelector("[data-cookie-notice-close]");
+  if (cookieNoticeClose) {
+    cookieNoticeClose.addEventListener("click", function () {
+      document.documentElement.classList.add("cookie-notice-seen");
+      try { localStorage.setItem("cookie-notice-v1", "1"); } catch (e) { /* bez zapisu: wróci na kolejnej stronie */ }
+    });
+  }
+
   var banner = document.querySelector("[data-offline-banner]");
   function updateOnline() {
     if (banner) banner.hidden = navigator.onLine;

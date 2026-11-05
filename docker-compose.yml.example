@@ -27,6 +27,9 @@ services:
       # X-Forwarded-For, omijając limity prób logowania per IP).
       # Wariant z tunelem WireGuard (patrz README, opcja C): "10.10.10.2:8000:8000".
       - "127.0.0.1:8000:8000"
+    # Logi mają adresy IP i muszą znikać po 30 dniach (polityka prywatności, README: „Logi”).
+    logging:
+      driver: journald
     restart: unless-stopped
 
   redis:

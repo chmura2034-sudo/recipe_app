@@ -783,6 +783,20 @@ h1 { margin-top: 0; }
 }
 .nav-link-button:hover { color: var(--primary); }
 
+/* Informacja o ciasteczkach. Bez JavaScriptu nie da się jej zamknąć, więc zostaje w treści strony,
+   a nie na stałe nad nią. */
+.cookie-notice {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5rem 1rem;
+  padding: 0.7rem 1rem; background: var(--card-bg); border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.cookie-notice p { margin: 0; }
+.cookie-notice button { display: none; }
+.js .cookie-notice { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.15); }
+.js .cookie-notice button { display: inline-block; }
+.cookie-notice-seen .cookie-notice { display: none; }
+@media print { .cookie-notice { display: none; } }
+
 .nav-toggle { display: none; }
 
 /* Menu jako lista rozwijana: wąskie ekrany oraz telefony i tablety (też w poziomie).

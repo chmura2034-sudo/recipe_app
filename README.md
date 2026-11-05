@@ -620,6 +620,10 @@ Układ: `cloudflared` na serwerze zestawia **wychodzące** połączenie do Cloud
 kończy się na brzegu Cloudflare. Serwer nie potrzebuje publicznego IP ani otwartych portów
 80/443. Domena musi być dodana do konta Cloudflare (serwery nazw wskazują na Cloudflare).
 
+**Polityka prywatności nie uwzględnia Cloudflare.** Przed wyborem tej opcji zaktualizuj
+`templates/privacy.html`: dopisz Cloudflare jako odbiorcę danych, opisz przekazywanie danych poza
+EOG, popraw zdanie o wczytywaniu wszystkiego z własnego serwera i sprawdź ciasteczka Cloudflare.
+
 ```
 przeglądarka ──HTTPS──▶ Cloudflare ◀──tunel── cloudflared ──HTTP:8000──▶ gunicorn (wsgi:app)
 ```
@@ -720,6 +724,24 @@ curl https://twoja-domena.pl/healthz      # {"status":"ok"}
 Następnie otwórz `https://twoja-domena.pl/login`, zaloguj się na konto administratora i
 dodaj testowy przepis ze zdjęciem (sprawdza zapis do bazy i do `static/uploads`).
 
+### Logi: maksymalnie 30 dni
+
+Polityka prywatności obiecuje, że logi z adresami IP są przechowywane **30 dni**. Żadna z opcji
+nie ustawia tego sama, więc skonfiguruj to na każdym serwerze z logami. Jeśli zmienisz ten okres,
+zaktualizuj też `templates/privacy.html`.
+
+```bash
+# journald: logi usługi systemd (opcja B) i inne logi systemu
+sudo mkdir -p /etc/systemd/journald.conf.d
+printf '[Journal]\nMaxRetentionSec=30day\nMaxFileSec=1day\n' | sudo tee /etc/systemd/journald.conf.d/retention.conf
+sudo systemctl restart systemd-journald
+```
+
+- **nginx (opcje A-C):** w `/etc/logrotate.d/nginx` ustaw `daily` i `rotate 30`.
+- **Docker (opcja A):** domyślny sterownik logów nie usuwa wpisów po czasie, dlatego
+  `docker-compose.yml.example` kieruje logi do journald, gdzie obowiązuje limit z polecenia wyżej.
+  Po zmianie uruchom kontener ponownie: `docker compose up -d --force-recreate app`.
+
 ### Kopie zapasowe przez cron
 
 Opcja B (crontab użytkownika `www-data`: `sudo crontab -u www-data -e`; katalog
@@ -778,5 +800,6 @@ Kopie regularnie przenoś **poza serwer** (np. `rsync`/`rclone` do chmury).
       logowania osobno). W opcji A ustawia to `docker-compose.yml`, w opcji B patrz krok B2a.
       Przy `memory://` na produkcji aplikacja zapisuje ostrzeżenie w logu. Gdy Redis jest
       niedostępny, logowanie działa dalej, a limity są liczone osobno w każdym workerze.
+- [ ] Logi usuwane po 30 dniach, tak jak obiecuje polityka prywatności (patrz „Logi: maksymalnie 30 dni”).
 - [ ] `.env` nie trafia do systemu kontroli wersji (już w `.gitignore`) i nie jest czytelny dla
       innych użytkowników (`600`, w opcji B `640` z grupą `www-data`).
