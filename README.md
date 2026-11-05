@@ -323,10 +323,11 @@ przez SSH na użytkownika z `sudo` oraz własną domenę (w przykładach: `twoja
 | **A. Docker** | najprościej, łatwe aktualizacje | kontener z gunicornem + nginx na hoście (HTTPS) |
 | **B. gunicorn + systemd** | klasyczny VPS bez Dockera | venv + usługa systemd + nginx (HTTPS) |
 | **C. Dwa serwery + WireGuard** | publiczny serwer brzegowy (VPS1) i ukryty backend (VPS2) | VPS1: nginx + HTTPS, VPS2: aplikacja (A lub B) dostępna tylko przez tunel |
+| **D. Cloudflare Tunnel** | serwer bez publicznego IP albo bez otwartych portów 80/443 (także domowy), domena w Cloudflare | aplikacja (A lub B) + `cloudflared`, bez nginx i certyfikatu |
 
-We wszystkich opcjach ruch z internetu trafia **najpierw do nginx** (HTTPS), który przekazuje
-go do gunicorna na porcie `8000`. Gunicorn nigdy nie powinien być dostępny bezpośrednio
-z internetu.
+W opcjach A-C ruch z internetu trafia **najpierw do nginx** (HTTPS), który przekazuje
+go do gunicorna na porcie `8000`. W opcji D tę rolę przejmuje Cloudflare. Gunicorn nigdy
+nie powinien być dostępny bezpośrednio z internetu.
 
 ```
 przeglądarka ──HTTPS:443──▶ nginx ──HTTP:8000──▶ gunicorn (wsgi:app) ──▶ SQLite + static/uploads
@@ -613,6 +614,102 @@ Test z VPS1: `curl -H "Host: twoja-domena.pl" http://10.10.10.2:8000/healthz`
 
 ---
 
+### Opcja D: Cloudflare Tunnel
+
+Układ: `cloudflared` na serwerze zestawia **wychodzące** połączenie do Cloudflare, a HTTPS
+kończy się na brzegu Cloudflare. Serwer nie potrzebuje publicznego IP ani otwartych portów
+80/443. Domena musi być dodana do konta Cloudflare (serwery nazw wskazują na Cloudflare).
+
+```
+przeglądarka ──HTTPS──▶ Cloudflare ◀──tunel── cloudflared ──HTTP:8000──▶ gunicorn (wsgi:app)
+```
+
+Instrukcja zakłada tunel **bezpośrednio do gunicorna**, bez nginx. Pliki statyczne i zdjęcia
+serwuje wtedy sam gunicorn.
+
+**D1. Serwer i aplikacja** - wykonaj kroki 1 i 2 oraz opcję A albo B, z tymi zmianami:
+
+- w kroku 1 pomiń `nginx` i `certbot`, regułę `ufw allow 'Nginx Full'` oraz rekord A/AAAA,
+- pomiń krok 3 (certyfikat) i całą konfigurację nginx (kroki A4 oraz B6),
+- zostaw gunicorna na `127.0.0.1:8000` (w Dockerze `"127.0.0.1:8000:8000"`),
+- w `.env` ustaw `PROXY_COUNT=1` (jedynym proxy z nagłówkami jest Cloudflare) i
+  `TRUSTED_HOSTS=twoja-domena.pl`.
+
+Sprawdź lokalnie: `curl http://127.0.0.1:8000/healthz` powinno zwrócić `{"status":"ok"}`.
+
+**D2. Instalacja `cloudflared`:**
+
+```bash
+sudo mkdir -p --mode=0755 /usr/share/keyrings
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
+sudo apt-get update && sudo apt-get install -y cloudflared
+```
+
+**D3. Tunel i DNS** (jako zwykły użytkownik, bez `sudo`):
+
+```bash
+cloudflared tunnel login                 # otwiera link do logowania i wyboru domeny
+cloudflared tunnel create recipe-app     # wypisze UUID tunelu i ścieżkę do pliku .json
+cloudflared tunnel route dns recipe-app twoja-domena.pl
+```
+
+**D4. Konfiguracja** - utwórz `~/.cloudflared/config.yml`:
+
+```yaml
+tunnel: <UUID-tunelu>
+credentials-file: /home/<uzytkownik>/.cloudflared/<UUID-tunelu>.json
+
+ingress:
+  - hostname: twoja-domena.pl
+    service: http://127.0.0.1:8000
+  # Wymagana reguła końcowa: inne domeny dostają 404.
+  - service: http_status:404
+```
+
+Nie ustawiaj `httpHostHeader`: aplikacja ma dostać oryginalny nagłówek `Host`, bo sprawdza go
+`TRUSTED_HOSTS` i buduje z niego adresy w `sitemap.xml`.
+
+```bash
+cloudflared tunnel ingress validate
+cloudflared tunnel run recipe-app        # test na pierwszym planie, zakończ przez Ctrl+C
+```
+
+**D5. Uruchomienie jako usługa:**
+
+```bash
+sudo cloudflared --config /home/<uzytkownik>/.cloudflared/config.yml service install
+sudo systemctl start cloudflared
+systemctl status cloudflared
+```
+
+Po każdej zmianie `config.yml`: `sudo systemctl restart cloudflared`.
+
+**D6. Ustawienia w panelu Cloudflare i weryfikacja:**
+
+- Włącz **Always Use HTTPS** (SSL/TLS → Edge Certificates). Bez tego wejście przez `http://`
+  dotrze do aplikacji, a ciasteczko sesji działa tylko przez HTTPS.
+- Sprawdź, czy limity działają per użytkownik: zaloguj się przez `https://twoja-domena.pl`
+  i poszukaj wpisu `Zalogowano` w logu (`journalctl -u recipe-app` albo
+  `docker compose logs app`). Pole `ip=` musi pokazywać **Twój publiczny adres**. Jeśli widać
+  `127.0.0.1` albo adres Cloudflare, wszyscy czytelnicy dzielą jeden limit: popraw `PROXY_COUNT`.
+
+Co warto wiedzieć w tej opcji:
+
+- **Limit wysyłania:** na planie Free Cloudflare odrzuca żądania ponad **100 MB** błędem `413`,
+  zanim dotrą do serwera. To dotyczy importu kopii zapasowej i nie zmieni tego `MAX_UPLOAD_MB`,
+  więc rozmiar kopii sprawdzaj zawczasu.
+- **Długie żądania:** import z dużą liczbą zdjęć może skończyć się w przeglądarce błędem `524`
+  (przekroczony czas Cloudflare). Serwer może wtedy nadal kończyć pracę, więc przed ponowną
+  próbą sprawdź log i stan bazy.
+- **Cache:** `style.css` i pliki JS mają stałe adresy, a Cloudflare może je przechowywać.
+  Po wdrożeniu nowej wersji wyczyść cache w panelu (Caching → Purge Cache).
+- **Nie dokładaj nginx między tunel a gunicorna** bez zmiany tej konfiguracji: nginx nadpisuje
+  `X-Forwarded-Proto` i dopisuje się do `X-Forwarded-For`, więc samo `PROXY_COUNT` przestanie
+  się zgadzać.
+
+---
+
 ### Krok końcowy: weryfikacja (wszystkie opcje)
 
 ```bash
@@ -652,6 +749,8 @@ Kopie regularnie przenoś **poza serwer** (np. `rsync`/`rclone` do chmury).
 | Logowanie „nie działa” (wraca na stronę logowania), błąd CSRF | Strona otwarta po zwykłym `http://` - ciasteczko sesji jest tylko dla HTTPS. Wejdź przez `https://` i sprawdź `PROXY_COUNT=1`. |
 | `attempt to write a readonly database` / `unable to open database file` | Katalog z bazą nie należy do `www-data` albo nie ma go w `ReadWritePaths` (krok B2 i B5). |
 | Błąd przy zapisie zdjęcia | `static/uploads` nie należy do `www-data` / brak w `ReadWritePaths`. |
+| `413` przy imporcie kopii w opcji D, bez śladu w logu aplikacji | Limit Cloudflare (plan Free: 100 MB) - patrz „Opcja D: Cloudflare Tunnel”. |
+| `502`/`1033` z Cloudflare w opcji D | Tunel nie działa albo gunicorn nie słucha na `127.0.0.1:8000` - `systemctl status cloudflared`, sprawdź `curl` na `/healthz` lokalnie. |
 | `413 Request Entity Too Large` | Przy zdjęciu: plik przekracza ogólny `client_max_body_size` (10 MB). Przy imporcie kopii: patrz „Duże kopie zapasowe (limit rozmiaru)”. |
 | Konto admina zablokowane po błędnych hasłach | `flask unlock-user --username admin` (w opcji A przez `docker compose exec app ...`). |
 
@@ -660,14 +759,15 @@ Kopie regularnie przenoś **poza serwer** (np. `rsync`/`rclone` do chmury).
 - [ ] `SECRET_KEY` wygenerowany (`python3 -c "import secrets; print(secrets.token_hex(32))"`)
       i ustawiony w `.env` - bez tego aplikacja **odmówi startu** (patrz `validate_production_config`).
 - [ ] `APP_ENV=production` (domyślne - po prostu nie ustawiaj `development` na serwerze).
-- [ ] Aplikacja dostępna wyłącznie przez HTTPS (nginx + certyfikat); `SESSION_COOKIE_SECURE`
-      zostaje na `true` (domyślne w production).
+- [ ] Aplikacja dostępna wyłącznie przez HTTPS (nginx + certyfikat albo w opcji D Cloudflare
+      z włączonym Always Use HTTPS); `SESSION_COOKIE_SECURE` zostaje na `true` (domyślne w production).
 - [ ] `TRUSTED_HOSTS` ustawione na domenę serwisu, a nginx ma bloki `default_server`
-      odrzucające nieznane domeny (patrz `deploy/nginx.conf.example`).
+      odrzucające nieznane domeny (patrz `deploy/nginx.conf.example`). W opcji D tę rolę pełni
+      końcowa reguła `http_status:404` w `config.yml`.
 - [ ] Port `8000` niedostępny z internetu (bind na `127.0.0.1` / adres tunelu; w Dockerze
       mapowanie `127.0.0.1:8000:8000`, bo Docker omija `ufw`).
 - [ ] `PROXY_COUNT` ustawiony na dokładną liczbę serwerów proxy przed aplikacją (zwykle `1`
-      dla pojedynczego nginx) - źle ustawiony psuje limit logowań per IP i wykrywanie HTTPS.
+      dla pojedynczego nginx albo samego Cloudflare Tunnel) - źle ustawiony psuje limit logowań per IP i wykrywanie HTTPS.
 - [ ] Hasło administratora nadane przy `flask create-admin` jest unikalne i silne
       (min. 10 znaków, nie z listy popularnych - wymuszane automatycznie).
 - [ ] Migracje zastosowane (`flask db upgrade`) **przed** pierwszym uruchomieniem gunicorna
