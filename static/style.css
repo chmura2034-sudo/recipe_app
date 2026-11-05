@@ -252,7 +252,8 @@ h1 { margin-top: 0; }
 .styled-form label { font-weight: 600; margin-top: 0.6rem; font-size: 0.9rem; }
 
 .styled-form input,
-.styled-form textarea {
+.styled-form textarea,
+.form-row select {
   padding: 0.6rem 0.8rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -262,6 +263,8 @@ h1 { margin-top: 0; }
 
 .form-row { display: flex; gap: 1rem; flex-wrap: wrap; }
 .form-row > div { flex: 1; min-width: 140px; }
+.form-row input,
+.form-row select { width: 100%; } /* .styled-form rozciąga tylko bezpośrednie dzieci */
 
 .styled-form button[type="submit"] { margin-top: 1.2rem; align-self: flex-start; }
 
