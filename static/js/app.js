@@ -171,6 +171,32 @@
     if (installButton) installButton.hidden = true;
   });
 
+  // Menu mobilne: lista rozwijana. Przycisk pokazuje tylko CSS na telefonach.
+  var navToggle = document.querySelector("[data-nav-toggle]");
+  var navLinks = document.getElementById("navLinks");
+  function setNavOpen(open) {
+    navLinks.classList.toggle("nav-open", open);
+    navToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  if (navToggle && navLinks) {
+    navToggle.addEventListener("click", function () {
+      setNavOpen(!navLinks.classList.contains("nav-open"));
+    });
+    document.addEventListener("click", function (event) {
+      if (!event.target.closest("nav") || event.target.closest("#navLinks a")) setNavOpen(false);
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && navLinks.classList.contains("nav-open")) {
+        setNavOpen(false);
+        navToggle.focus();
+      }
+    });
+    // Powrót przyciskiem „wstecz” może przywrócić stronę z pamięci z otwartym menu.
+    window.addEventListener("pageshow", function (event) {
+      if (event.persisted) setNavOpen(false);
+    });
+  }
+
   var banner = document.querySelector("[data-offline-banner]");
   function updateOnline() {
     if (banner) banner.hidden = navigator.onLine;

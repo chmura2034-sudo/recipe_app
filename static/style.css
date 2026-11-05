@@ -783,6 +783,34 @@ h1 { margin-top: 0; }
 }
 .nav-link-button:hover { color: var(--primary); }
 
+.nav-toggle { display: none; }
+
+/* Menu jako lista rozwijana: wąskie ekrany oraz telefony i tablety (też w poziomie).
+   Klasa .js pochodzi ze skryptu w base.html - bez JavaScriptu linki zostają widoczne. */
+@media (max-width: 600px), (max-width: 900px) and (pointer: coarse) {
+  .js .topbar nav { position: relative; flex: 1 1 100%; }
+  .js .nav-toggle {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+    width: 100%; min-height: 44px; padding: 0.5rem 0.8rem;
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
+    font: inherit; font-weight: 600; color: var(--text); cursor: pointer;
+  }
+  .js .nav-toggle[aria-expanded="true"] .nav-toggle-arrow { transform: rotate(180deg); }
+  .js .nav-links { display: none; }
+  .js .nav-links.nav-open {
+    display: block; position: absolute; top: 100%; left: 0; right: 0; z-index: 20;
+    margin-top: 0.3rem; padding: 0.3rem 0;
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  }
+  .js .nav-links a, .js .nav-links .nav-link-button {
+    display: block; width: 100%; margin: 0; padding: 0.7rem 0.9rem; text-align: left;
+    font-size: 1rem;
+  }
+  .js .nav-links .nav-logout-form { display: block; }
+  .js .nav-links .theme-toggle { margin: 0.3rem 0.9rem; }
+}
+
 /* ---------- Wartości odżywcze (podsumowanie na stronie przepisu) ---------- */
 .nutrition-summary {
   background: var(--bg);

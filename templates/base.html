@@ -32,6 +32,8 @@
       var dark = pref === "dark" || (pref !== "light" && window.matchMedia &&
         window.matchMedia("(prefers-color-scheme: dark)").matches);
       document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+      // Menu mobilne zwija się tylko z JavaScriptem - bez niego linki zostają widoczne.
+      document.documentElement.classList.add("js");
     })();
   </script>
   {% block head %}{% endblock %}
@@ -50,6 +52,18 @@
     </a>
     <nav>
       {% set ep = request.endpoint or '' %}
+      {# Na telefonach app.js zwija linki do listy; przycisk pokazuje bieżącą zakładkę. #}
+      <button type="button" class="nav-toggle" data-nav-toggle aria-controls="navLinks" aria-expanded="false">
+        <span>
+          {%- if ep in ('index', 'recipe_detail') %}Przepisy
+          {%- elif ep in ('blog_index', 'blog_detail') %}Blog
+          {%- elif ep == 'favorites' %}♥ Ulubione
+          {%- elif ep == 'shopping_list' %}🛒 Lista zakupów
+          {%- else %}Menu{% endif -%}
+        </span>
+        <span class="nav-toggle-arrow" aria-hidden="true">▾</span>
+      </button>
+      <div class="nav-links" id="navLinks">
       <a href="{{ url_for('index') }}" class="{{ 'nav-active' if ep in ('index', 'recipe_detail') else '' }}">Przepisy</a>
       <a href="{{ url_for('blog_index') }}" class="{{ 'nav-active' if ep in ('blog_index', 'blog_detail') else '' }}">Blog</a>
       <a href="{{ url_for('favorites') }}" class="{{ 'nav-active' if ep == 'favorites' else '' }}">♥ Ulubione</a>
@@ -71,6 +85,7 @@
       {# Przycisk pokazuje app.js - bez JavaScriptu i tak nie dałoby się zmienić motywu. #}
       <button type="button" class="theme-toggle" data-theme-toggle hidden
               aria-label="Zmień motyw" title="Zmień motyw">🌓</button>
+      </div>
     </nav>
   </header>
 
