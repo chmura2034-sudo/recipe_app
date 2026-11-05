@@ -1,7 +1,7 @@
 # Graph Report - recipe_app  (2026-11-05)
 
 ## Corpus Check
-- 24 files · ~35,037 words
+- 24 files · ~35,360 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 14 file(s) not represented in the graph (top: .example 6, (none) 5, .ini 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `4a264940`
+- Built from commit: `5b483f59`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

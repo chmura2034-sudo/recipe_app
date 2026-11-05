@@ -1,7 +1,7 @@
 # Graph Report - recipe_app  (2026-11-05)
 
 ## Corpus Check
-- 24 files · ~35,041 words
+- 24 files · ~35,037 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 14 file(s) not represented in the graph (top: .example 6, (none) 5, .ini 1)
 

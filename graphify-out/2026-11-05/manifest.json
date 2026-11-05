@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "static/js/app.js": {
-    "mtime": 1793879075.4618766,
-    "seen": 1793879078.7523804,
-    "ast_hash": "1658dd9f8f8c9e47e767b4f68c5f20e1",
+    "mtime": 1793879089.8060467,
+    "seen": 1793879091.668884,
+    "ast_hash": "956557cada57c96af2fffb162e0c4ece",
     "semantic_hash": ""
   },
   "wsgi.py": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1793878853.0415716,
-    "seen": 1793878853.8131666,
-    "ast_hash": "d80757a67c52db5bf196d271afabf59c",
+    "mtime": 1793881191.5244443,
+    "seen": 1793881192.3125637,
+    "ast_hash": "55ada91a49597081a4908e3f17165c1e",
     "semantic_hash": ""
   },
   "requirements.txt": {
@@ -276,9 +276,9 @@
     "semantic_hash": ""
   },
   "templates/privacy.html": {
-    "mtime": 1793709843.2467818,
-    "seen": 1793787055.363677,
-    "ast_hash": "3742e3ea4d2c57736f05951ca8524ddf",
+    "mtime": 1793881183.215746,
+    "seen": 1793881184.6786733,
+    "ast_hash": "81d3611ec0affb0f4ae7676dff8ad93c",
     "semantic_hash": ""
   },
   "migrations/versions/d4e5f6a7b8c9_user_session_token.py": {
