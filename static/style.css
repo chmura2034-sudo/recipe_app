@@ -385,8 +385,14 @@ h1 { margin-top: 0; }
 .btn-remove-row:hover { background: #f6cfcf; }
 
 .ingredients-list { list-style: none; padding: 0; }
-.ingredients-list li { padding: 0.3rem 0; border-bottom: 1px dashed var(--border); }
-.ingredient-amount { font-weight: 700; margin-right: 0.4rem; color: var(--primary); }
+/* Flex: ilość to osobna kolumna, a długa nazwa zawija się pod własny początek (jeden blok
+   tekstu), a nie pod ilość. */
+.ingredients-list li {
+  display: flex; align-items: baseline; gap: 0.4rem;
+  padding: 0.3rem 0; border-bottom: 1px dashed var(--border);
+}
+.ingredient-amount { flex-shrink: 0; font-weight: 700; color: var(--primary); }
+.ingredients-list li > span:last-child { min-width: 0; overflow-wrap: anywhere; }
 
 /* ---------- Tagi ---------- */
 .tag-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.6rem 0; }
@@ -1160,7 +1166,13 @@ h1 { margin-top: 0; }
 :root[data-theme="dark"] .difficulty-trudny { color: #f2aaaa; }
 
 /* ---------- minutniki w krokach ---------- */
-.step-timers { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.35rem 0 0 2rem; }
+/* Minutniki stoją pod etykietą kroku (po jej dolnym paddingu), więc same muszą odsunąć się
+   od linii oddzielającej kroki; lewy margines = padding + checkbox + odstęp etykiety. */
+.step-timers {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  margin: -0.25rem 0 0 calc(0.2rem + 18px + 0.7rem);
+  padding-bottom: 0.6rem;
+}
 .step-timer { display: inline-flex; align-items: center; gap: 0.2rem; }
 .step-timer-btn, .step-timer-reset {
   border: 1px solid var(--border); background: var(--card-bg); color: var(--primary);
