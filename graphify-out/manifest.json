@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1793881191.5244443,
-    "seen": 1793881192.3125637,
-    "ast_hash": "55ada91a49597081a4908e3f17165c1e",
+    "mtime": 1794249781.6271315,
+    "seen": 1794249789.3062313,
+    "ast_hash": "ca7c9ec38077db015d6dc664a8327b55",
     "semantic_hash": ""
   },
   "requirements.txt": {
@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "templates/recipe_detail.html": {
-    "mtime": 1793831401.1024215,
-    "seen": 1793831465.5612116,
-    "ast_hash": "6cd9e5dec9294994c42c73f41dc35eeb",
+    "mtime": 1794249781.6266532,
+    "seen": 1794249789.3062618,
+    "ast_hash": "36fc6f0ddfbe22699c70d2a5a5e032a8",
     "semantic_hash": ""
   },
   "templates/redaktor/dashboard.html": {
@@ -276,9 +276,9 @@
     "semantic_hash": ""
   },
   "templates/privacy.html": {
-    "mtime": 1793881364.7817154,
-    "seen": 1793881376.71301,
-    "ast_hash": "bcea893844e9626838a5f9c15f3291ac",
+    "mtime": 1793883396.6918945,
+    "seen": 1793883398.355382,
+    "ast_hash": "d2eddcf9c97596702d503e1d562bfbcf",
     "semantic_hash": ""
   },
   "migrations/versions/d4e5f6a7b8c9_user_session_token.py": {
