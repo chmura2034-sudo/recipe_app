@@ -1,0 +1,16 @@
+# Usuwanie logów systemowych po 30 dniach (polityka prywatności obiecuje ten okres).
+# Obejmuje logi aplikacji: usługi systemd (opcja B) i kontenera (driver journald w opcji A).
+#
+# Instalacja:
+#   sudo mkdir -p /etc/systemd/journald.conf.d
+#   sudo cp deploy/journald-retention.conf.example /etc/systemd/journald.conf.d/retention.conf
+#   sudo systemctl restart systemd-journald
+#
+# Zmieniając okres, zaktualizuj też templates/privacy.html.
+
+[Journal]
+# 29, a nie 30: journald usuwa tylko całe pliki, a plik obejmuje do 1 dnia (MaxFileSec),
+# więc jego najstarsze wpisy znikają o dobę później - razem najwyżej 30 dni.
+MaxRetentionSec=29day
+# journald usuwa tylko zamknięte pliki, więc bez codziennego zamykania wpisy żyłyby dłużej.
+MaxFileSec=1day

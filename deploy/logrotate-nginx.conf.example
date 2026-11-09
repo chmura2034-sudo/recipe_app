@@ -1,0 +1,24 @@
+# Usuwanie logów nginx po 30 dniach (polityka prywatności obiecuje ten okres).
+#
+# Instalacja (zastępuje domyślną regułę nginx):
+#   sudo cp deploy/logrotate-nginx.conf.example /etc/logrotate.d/nginx
+#   sudo logrotate -d /etc/logrotate.d/nginx     # test bez zmian na dysku
+#
+# Zmieniając okres, zaktualizuj też templates/privacy.html.
+
+/var/log/nginx/*.log {
+    daily
+    # 29, a nie 30: obok 29 starszych plików jest jeszcze bieżący log, więc najstarsze wpisy
+    # mają najwyżej 30 dni.
+    rotate 29
+    maxage 29
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 0640 www-data adm
+    sharedscripts
+    postrotate
+        [ ! -f /run/nginx.pid ] || kill -USR1 "$(cat /run/nginx.pid)"
+    endscript
+}

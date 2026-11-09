@@ -182,7 +182,7 @@
                   {% if item.amount or item.unit %}
                     <span class="ingredient-amount"><span class="amount-value" data-original="{{ item.amount }}">{{ item.amount }}</span>{% if item.unit %} {{ item.unit }}{% endif %}</span>
                   {% endif %}
-                  <span>{{ item.name }}</span>
+                  <span class="ingredient-name">{{ item.name }}</span>
                 </li>
               {% endfor %}
             </ul>

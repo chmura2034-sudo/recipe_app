@@ -99,6 +99,8 @@ recipe_app/
 ├── deploy/
 │   ├── nginx.conf.example        # reverse proxy + HTTPS
 │   ├── recipe-app.service.example # jednostka systemd (gunicorn)
+│   ├── journald-retention.conf.example # usuwanie logów aplikacji po 30 dniach
+│   ├── logrotate-nginx.conf.example    # usuwanie logów nginx po 30 dniach
 │   └── wireguard/                # tunel VPS1 (nginx) ↔ VPS2 (aplikacja), opcja C
 ├── migrations/                   # migracje Alembic (flask db upgrade)
 │   └── versions/
@@ -157,7 +159,8 @@ Panel administratora (`/admin/kopia-zapasowa`) pozwala:
 
 ### Zalecana praktyka
 
-Regularnie pobieraj kopię zapasową i trzymaj ją **poza serwerem** (dysk w chmurze, backup lokalny).
+Regularnie pobieraj kopię zapasową i trzymaj ją **poza serwerem**, na prywatnym komputerze.
+Dysk w chmurze byłby dodatkowym odbiorcą danych, więc wymagałby zmiany polityki prywatności.
 Z poziomu przeglądarki służy do tego przycisk na `/admin/kopia-zapasowa`; do automatyzacji
 (np. przez `cron`) użyj polecenia `flask export-backup` - patrz sekcja „Wdrożenie produkcyjne”.
 
@@ -577,6 +580,11 @@ uruchamia aplikację, która nasłuchuje tylko w tunelu (`10.10.10.2:8000`) i ni
 z internetu. To tunel punkt-do-punktu, nie pełny VPN - szczegóły w komentarzach plików
 `deploy/wireguard/*.conf.example`.
 
+**Oba serwery muszą być u dostawcy wskazanego w polityce prywatności** (sekcja 4
+`templates/privacy.html`: Korbank SA, serwery w Polsce). VPS1 też przetwarza dane osobowe
+(logi nginx z adresami IP), więc jeśli którykolwiek serwer stoi u innego dostawcy, dopisz go
+w polityce jako odbiorcę danych, a poza EOG opisz też przekazywanie danych.
+
 **C1. WireGuard na obu serwerach:**
 
 ```bash
@@ -726,41 +734,79 @@ dodaj testowy przepis ze zdjęciem (sprawdza zapis do bazy i do `static/uploads`
 
 ### Logi: maksymalnie 30 dni
 
-Polityka prywatności obiecuje, że logi z adresami IP są przechowywane **30 dni**. Żadna z opcji
-nie ustawia tego sama, więc skonfiguruj to na każdym serwerze z logami. Jeśli zmienisz ten okres,
-zaktualizuj też `templates/privacy.html`.
+Polityka prywatności obiecuje, że logi z adresami IP są przechowywane **30 dni**. Aplikacja
+nie zapisuje własnych plików z logami, więc usuwaniem zajmuje się system. Wystarczy raz zainstalować
+gotowe pliki z `deploy/`, a dalej działa to automatycznie. Zrób to na każdym serwerze z logami:
 
 ```bash
-# journald: logi usługi systemd (opcja B) i inne logi systemu
+cd /opt/recipe-app
+
+# journald: logi aplikacji (usługa systemd i kontener)
 sudo mkdir -p /etc/systemd/journald.conf.d
-printf '[Journal]\nMaxRetentionSec=30day\nMaxFileSec=1day\n' | sudo tee /etc/systemd/journald.conf.d/retention.conf
+sudo cp deploy/journald-retention.conf.example /etc/systemd/journald.conf.d/retention.conf
 sudo systemctl restart systemd-journald
+
+# nginx (opcje A-C): zastępuje domyślną regułę logrotate
+sudo cp deploy/logrotate-nginx.conf.example /etc/logrotate.d/nginx
+sudo logrotate -d /etc/logrotate.d/nginx     # test bez zmian na dysku
 ```
 
-- **nginx (opcje A-C):** w `/etc/logrotate.d/nginx` ustaw `daily` i `rotate 30`.
 - **Docker (opcja A):** domyślny sterownik logów nie usuwa wpisów po czasie, dlatego
-  `docker-compose.yml.example` kieruje logi do journald, gdzie obowiązuje limit z polecenia wyżej.
+  `docker-compose.yml.example` kieruje logi do journald, gdzie obowiązuje limit 30 dni.
   Po zmianie uruchom kontener ponownie: `docker compose up -d --force-recreate app`.
+- **Zmiana okresu:** popraw oba pliki i `templates/privacy.html`.
 
 ### Kopie zapasowe przez cron
 
-Opcja B (crontab użytkownika `www-data`: `sudo crontab -u www-data -e`; katalog
-`/backups` musi istnieć i należeć do `www-data`):
+Kopie powstają na serwerze co noc i zostają tam **7 dni**, a Twój komputer pobiera je i trzyma
+**90 dni**. Te okresy podaje polityka prywatności, więc zmieniając je, zaktualizuj też
+`templates/privacy.html`.
+
+Katalog `/backups` musi istnieć i należeć do użytkownika, który tworzy kopie. Poniżej
+`<uzytkownik>` to konto SSH, przez które komputer pobiera pliki.
+
+Opcja B (crontab roota: `sudo crontab -e`; `/backups` należy do `www-data`):
 
 ```bash
-# backup codziennie o 3:00
-0 3 * * * cd /opt/recipe-app && venv/bin/flask --app app export-backup -o /backups/przepisy-$(date +\%F).zip
+# backup codziennie o 3:00; plik przekazany kontu SSH, bo eksport zapisuje go z uprawnieniami 600
+0 3 * * * F=/backups/przepisy-$(date +\%F).zip; cd /opt/recipe-app && sudo -u www-data venv/bin/flask --app app export-backup -o "$F" && chown <uzytkownik> "$F"
+# usuwanie kopii na serwerze po 7 dniach
+30 3 * * * find /backups -name 'przepisy-*.zip' -mtime +6 -delete
 ```
 
-Opcja A (crontab Twojego użytkownika, należącego do grupy `docker`):
+Opcja A (crontab konta `<uzytkownik>`, które musi należeć do grupy `docker`; plik skopiowany
+z kontenera należy do właściciela crontaba, więc to musi być to samo konto, przez które komputer
+pobiera kopie):
 
 ```bash
-0 3 * * * cd /opt/recipe-app && docker compose exec -T app flask export-backup -o /tmp/kopia.zip && docker compose cp app:/tmp/kopia.zip /backups/przepisy-$(date +\%F).zip
+# backup codziennie o 3:00; kopia tymczasowa w kontenerze jest usuwana zawsze, także po błędzie
+0 3 * * * cd /opt/recipe-app && docker compose exec -T app flask export-backup -o /tmp/kopia.zip && docker compose cp app:/tmp/kopia.zip /backups/przepisy-$(date +\%F).zip; docker compose exec -T app rm -f /tmp/kopia.zip
+30 3 * * * find /backups -name 'przepisy-*.zip' -mtime +6 -delete
 ```
 
 `flask export-backup` działa bez przeglądarki/sesji i zapisuje plik z uprawnieniami `600`
 (czytelny tylko dla właściciela) - patrz sekcja „Kopia zapasowa przepisów” wyżej.
-Kopie regularnie przenoś **poza serwer** (np. `rsync`/`rclone` do chmury).
+
+**Pobieranie na prywatny komputer (Linux).** Komputer potrzebuje klucza SSH bez hasła do konta
+`<uzytkownik>` i folderu na kopie (`mkdir -p ~/kopie-szczypta`). W crontabie komputera (`crontab -e`):
+
+```bash
+# co godzinę pobiera nowe kopie (cron nie nadrabia pominiętych uruchomień, więc pojedyncza
+# godzina łatwo trafiłaby na wyłączony komputer); rsync pomija pliki już pobrane
+0 * * * * rsync -rt --include='przepisy-*.zip' --exclude='*' <uzytkownik>@<adres-serwera>:/backups/ ~/kopie-szczypta/
+# usuwanie lokalnych kopii starszych niż 90 dni - niezależnie od tego, czy pobieranie działa
+30 * * * * find ~/kopie-szczypta -name 'przepisy-*.zip' -mtime +89 -delete
+```
+
+- Wyłączony komputer niczego nie traci, dopóki włączysz go w ciągu 7 dni (na co najmniej
+  godzinę): `rsync` pobierze wszystkie zaległe kopie. Usunięcie pliku z serwera nie usuwa go
+  z komputera.
+- Lokalne kopie są usuwane po 90 dniach także wtedy, gdy pobieranie przestanie działać
+  (np. po zmianie adresu serwera), więc sprawdzaj czasem, czy w folderze pojawiają się nowe pliki.
+- Kopie zawierają dane osobowe (komentarze, skróty IP, oceny, dane o autorach), więc włącz
+  szyfrowanie dysku. Logi do kopii nie trafiają.
+- Dane usunięte z serwisu, np. komentarz na prośbę autora, zostają w starszych kopiach najwyżej
+  90 dni. Po przywróceniu kopii usuń je ponownie.
 
 ### Najczęstsze problemy
 
@@ -794,7 +840,8 @@ Kopie regularnie przenoś **poza serwer** (np. `rsync`/`rclone` do chmury).
       (min. 10 znaków, nie z listy popularnych - wymuszane automatycznie).
 - [ ] Migracje zastosowane (`flask db upgrade`) **przed** pierwszym uruchomieniem gunicorna
       i po każdej aktualizacji kodu.
-- [ ] Kopie zapasowe skonfigurowane (cron + `flask export-backup`) i trzymane **poza** serwerem.
+- [ ] Kopie zapasowe skonfigurowane (cron + `flask export-backup`): 7 dni na serwerze, 90 dni na
+      prywatnym komputerze z szyfrowanym dyskiem (patrz „Kopie zapasowe przez cron”).
 - [ ] Przy więcej niż jednym workerze gunicorna (domyślnie jest ich 4): `RATELIMIT_STORAGE_URI`
       wskazuje na Redis, a nie zostaje na `memory://` (inaczej każdy worker liczy próby
       logowania osobno). W opcji A ustawia to `docker-compose.yml`, w opcji B patrz krok B2a.
